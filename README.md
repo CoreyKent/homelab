@@ -17,7 +17,7 @@ I am currently testing out a new architecture of single-node clusters where the 
 
 ### Nodes
 
-I currently use an Intel NUC as well as a few RaspberryPi's and my Synology NAS.
+I currently use an Intel NUC as well as a few Raspberry Pi's and my Synology NAS.
 
 Intel NUC 8I7BEH i7-8559U/32GB/240GB 500GB SSD
 
@@ -25,9 +25,6 @@ Raspberry Pi5 8GB
 
 Raspberry Pi4 2GB
 
-HP ELITEDESK 800 G2 MINI i3-6100T/8GB/240GB SSD
-
-Lenovo ThinkPad T430 i5 8GB RAM
 
 ## :rocket: Installed Apps & Tools
 
@@ -157,24 +154,6 @@ Everything needed to run my cluster & deploy my applications
     </tr>
 </table>
 
-## Build your own Home Lab?
-
-Do you feel inspired by this project, but don't know where to start?
-
-I created the only [Kubernetes homelab course](https://skool.com/kubecraft) on the internet and helped hundreds of people start their homelab journey.
-
-![https://skool.com/kubecraft](./images/homelab-feedback.png)
-
-To get access to the course, go here:
-
-<https://skool.com/kubecraft>
-
-## :camera: Full Walkthrough
-
-Watch this video:
-
-[![YouTube](http://i.ytimg.com/vi/WfDwFvl5XBo/hqdefault.jpg)](https://www.youtube.com/watch?v=WfDwFvl5XBo)
-
 ## Networking
 
 I use a Unifi Express Router, configured with 7 different VLANs which are all locked down by strict traffic rules.
@@ -183,7 +162,7 @@ I use [Cilium](https://cilium.io/) as my CNI. I use LoadBalancer IPAM to assign 
 
 ### Storage
 
-I use a Synology DS224+ as a NAS. I use the Synology CSI driver to provision Persistent Volumes from my clusters directly on the NAS. I also have an NFS share for data that needs to be shared between clusters.
+I use a Synology DS923+ as a NAS. I use the Synology CSI driver to provision Persistent Volumes from my clusters directly on the NAS. I also have an NFS share for data that needs to be shared between clusters.
 
 ## Secret Management
 
