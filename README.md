@@ -1,4 +1,5 @@
-# 🏠 Homelab   (Details Update in progress - Shamelessly ripped from <a href="https://github.com/mischavandenburg/homelab/">Mischa van den Burg/Homelab</a>
+# 🏠 Homelab   
+(Details Update in progress - Shamelessly ripped from <a href="https://github.com/mischavandenburg/homelab/">Mischa van den Burg/Homelab</a>
 
 ## Introduction
 
