@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: homarr
+  name: homarr
+  namespace: homarr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: homarr
+  template:
+    metadata:
+      labels:
+        app: homarr
+    spec:
+      containers:
+      - image: ghcr.io/homarr-labs/homarr:v1.19.0
+        name: homarr
+        ports: 
+          - containerPort: 7575

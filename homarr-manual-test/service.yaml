@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: homarr
+  name: homarr
+  namespace: homarr
+spec:
+  ports:
+  - port: 7575
+    protocol: TCP
+    targetPort: 7575
+  selector:
+    app: homarr
+  type: LoadBalancer
