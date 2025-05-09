@@ -19,6 +19,8 @@ I currently use an Intel NUC as well as a few Raspberry Pi's and my Synology NAS
 
 Intel NUC 8I7BEH i7-8559U/32GB/500GB SSD
 
+HP EliteDesk 800 G3 i7-7700/32GB/256GB SSD
+
 Raspberry Pi5 8GB
 
 Raspberry Pi4 2GB
