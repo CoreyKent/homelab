@@ -111,3 +111,5 @@ I use a Synology DS923+ as a NAS. I use the Synology CSI driver to provision Per
 ## Secret Management
 
 Azure Key Vaults are used to store my secrets. I sync them to my cluster using the External Secrets Operator.
+
+Updated: 1st June 2025
