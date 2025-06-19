@@ -9,6 +9,7 @@ provisioner: csi.san.synology.com
 parameters:
   dsm: '192.168.50.127'
   location: '/k8s-synology'
+  type: 'thin'
   protocol: iscsi
   csi.storage.k8s.io/fsType: 'ext4'
 reclaimPolicy: Delete
