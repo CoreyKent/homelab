@@ -1,0 +1,31 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: leantime
+  namespace: leantime
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: leantime
+      version: "3.5.x"
+      sourceRef:
+        kind: HelmRepository
+        name: leantime
+        namespace: leantime
+      interval: 12h
+  install:
+    crds: Create
+  upgrade:
+    crds: CreateReplace
+  driftDetection:
+    mode: enabled
+      #ignore:
+      # Ignore "validated" annotation which is not inserted during install
+      #- paths: ["/metadata/annotations/prometheus-operator-validated"]
+      #  target:
+      #    kind: PrometheusRule
+  values:
+    leantime:
+      adminPassword: default
+      app.defaultTimezone: Australia/Sydney
