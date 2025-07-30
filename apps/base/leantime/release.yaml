@@ -49,3 +49,17 @@ spec:
       size: 1Gi
       accessMode: ReadWriteOnce
       annotations: {}
+    replicaCount: 1
+    podSecurityContext:
+      fsGroup: 2000
+    securityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1000
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
