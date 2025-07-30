@@ -26,6 +26,22 @@ spec:
       #  target:
       #    kind: PrometheusRule
   values:
+    internalDatabase:
+      enabled: true
+      port: 3306
+    image:
+      repository: mariadb
+      pullpolicy: IfNotPresent
+      tag: "10.6.21"
+    persistence:
+      enabled: true
+      size: 2Gi
+      accessMode: ReadWriteOnce
+    resources: {}
+    securityContext: {}
+    user: leantime
+    password: ""
+    rootPassword: ""
     leantime:
       adminPassword: default
-      app.defaultTimezone: Australia/Sydney
+      defaultTimezone: "Australia/Sydney"
