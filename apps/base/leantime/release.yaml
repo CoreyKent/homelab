@@ -7,7 +7,7 @@ spec:
   interval: 30m
   chart:
     spec:
-      chart: gissilabs/leantime
+      chart: leantime
       version: "1.3.0"
       sourceRef:
         kind: HelmRepository

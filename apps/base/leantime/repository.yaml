@@ -5,4 +5,4 @@ metadata:
   namespace: leantime
 spec:
   interval: 24h
-  url: https://gissilabs.github.io/charts/
+  url: https://gissilabs.github.io/charts/leantime/
