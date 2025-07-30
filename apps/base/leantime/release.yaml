@@ -43,5 +43,9 @@ spec:
       password: ""
       rootPassword: ""
     leantime:
-      adminPassword: default
       defaultTimezone: "Australia/Sydney"
+    persistence:
+      enabled: true
+      size: 1Gi
+      accessMode: ReadWriteOnce
+      annotations: {}
