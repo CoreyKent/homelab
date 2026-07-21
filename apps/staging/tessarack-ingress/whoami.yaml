@@ -1,10 +1,10 @@
 # Throwaway end-to-end proof for BOTH paths. Delete once the pattern is confirmed.
 #
-# pub.tessarack.dev   -> proxied CNAME -> tunnel -> Traefik -> here   (must work publicly)
-# priv.tessarack.dev  -> grey A record -> Traefik on tailnet -> here  (must FAIL off-tailnet)
+# pub.tessarack.dev   -> proxied CNAME -> tunnel -> Traefik :80 (web)      (public)
+# priv.tessarack.dev  -> grey A record -> Traefik :443 (websecure) on tailnet (private)
 #
-# Same backend, same IngressRoute shape. The only difference between public and
-# private is the DNS record — which is the whole point of the design.
+# The public and private routes are NOT identical — they differ by how they're
+# reached, and that difference is load-bearing (see each route's comment below).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,18 +42,11 @@ spec:
   - port: 80
     targetPort: 80
 ---
-# Both routes listen on BOTH entrypoints, and both attach the same wildcard cert.
-#
-#   web (:80)       - what cloudflared hands traffic to. TLS already terminated
-#                     at the Cloudflare edge, so this leg is plain HTTP inside
-#                     the cluster and never seen by a browser.
-#   websecure (:443) - what a tailnet client hits directly. No Cloudflare in this
-#                     path, so Traefik must present a publicly-trusted cert here.
-#                     `.dev` is HSTS-preloaded, which makes a cert error
-#                     NON-BYPASSABLE — there is no "Advanced -> Proceed".
-#
-# Identical config for public and private is the point: which one a name becomes
-# is decided entirely by its DNS record.
+# PUBLIC route — reached only via cloudflared, which connects to Traefik on :80
+# (the `web` entrypoint) as plain HTTP. TLS is terminated at the Cloudflare edge,
+# so this router must NOT carry a `tls:` block: a tls block turns the router into
+# a TLS router, and a plaintext request on :80 then matches nothing -> 404.
+# (Verified 2026-07-21: web + no-tls serves; web + tls 404s.)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -61,23 +54,23 @@ metadata:
 spec:
   entryPoints:
     - web
-    - websecure
   routes:
   - match: Host(`pub.tessarack.dev`)
     kind: Rule
     services:
     - name: whoami
       port: 80
-  tls:
-    secretName: tessarack-dev-wildcard-tls
 ---
+# PRIVATE route — reached directly by a tailnet client on :443 (the `websecure`
+# entrypoint). No Cloudflare in this path, so Traefik terminates TLS itself with
+# the wildcard cert. `.dev` is HSTS-preloaded, so a cert error here is
+# NON-BYPASSABLE. This router DOES need the tls block, and only websecure.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: whoami-private
 spec:
   entryPoints:
-    - web
     - websecure
   routes:
   - match: Host(`priv.tessarack.dev`)
