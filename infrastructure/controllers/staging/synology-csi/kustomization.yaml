@@ -1,0 +1,7 @@
+# Carries forward exactly what the old staging/kustomization.yaml did for
+# synology-csi — same base, same namespace transformer. No behaviour change.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: synology-csi
+resources:
+  - ../../base/synology-csi/

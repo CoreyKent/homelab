@@ -1,5 +1,14 @@
+# REPLACES the existing file.
+#
+# Why the restructure: the previous version set a blanket `namespace: synology-csi`
+# at this level. Adding cert-manager alongside it would have rewritten every
+# cert-manager object into the synology-csi namespace — including the HelmRelease,
+# which would then install the controller in the wrong place.
+#
+# Each child now owns its own namespace transformer. synology-csi's effective
+# output is unchanged.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: synology-csi
 resources:
-  - ../base/synology-csi/
+  - ./synology-csi/
+  - ./cert-manager/

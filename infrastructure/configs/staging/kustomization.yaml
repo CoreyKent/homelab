@@ -1,5 +1,11 @@
+# REPLACES the existing file (which had an empty, commented-out resources list).
+#
+# This path is reconciled by the `infra-configs` Flux Kustomization, which
+# already declares `dependsOn: infra-controllers`. That ordering is what makes
+# the ClusterIssuers safe to place here — cert-manager's CRDs are guaranteed to
+# exist before these are applied.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  #  - cilium
-  #  - external-secrets
+  - cloudflare-api-token.yaml
+  - cluster-issuers.yaml

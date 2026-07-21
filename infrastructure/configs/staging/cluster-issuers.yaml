@@ -1,0 +1,44 @@
+# Two issuers on purpose. Let's Encrypt production allows only 5 duplicate
+# certificates per week — burning those while debugging a DNS-01 loop means
+# waiting a week. Prove the loop on staging, then flip the Certificate's
+# issuerRef to production. Staging certs are untrusted by browsers; that is
+# expected and is not the thing under test.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: quilb1@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+    - dns01:
+        cloudflare:
+          apiTokenSecretRef:
+            name: cloudflare-api-token
+            key: api-token
+      selector:
+        dnsZones:
+          - tessarack.dev
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: quilb1@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+    - dns01:
+        cloudflare:
+          apiTokenSecretRef:
+            name: cloudflare-api-token
+            key: api-token
+      selector:
+        dnsZones:
+          - tessarack.dev

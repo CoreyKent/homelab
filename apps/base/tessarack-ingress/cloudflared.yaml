@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+spec:
+  selector:
+    matchLabels:
+      app: cloudflared
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+      - name: cloudflared
+        # Pinned deliberately. The linkding tunnel runs :latest and both its pods
+        # show ~17 restarts — an unpinned tag means an upstream push can restart
+        # the ingress path with no change on our side.
+        image: cloudflare/cloudflared:2026.7.2
+        args:
+        - tunnel
+        - --config
+        - /etc/cloudflared/config/config.yaml
+        - run
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 2000
+          failureThreshold: 1
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/cloudflared/config
+          readOnly: true
+        - name: creds
+          mountPath: /etc/cloudflared/creds
+          readOnly: true
+      volumes:
+      - name: creds
+        secret:
+          secretName: tunnel-credentials
+      - name: config
+        configMap:
+          name: cloudflared
+          items:
+          - key: config.yaml
+            path: config.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared
+data:
+  config.yaml: |
+    # Tunnel name must match the tunnel created in Cloudflare.
+    tunnel: tessarack-ingress
+    credentials-file: /etc/cloudflared/creds/credentials.json
+
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+
+    # Deliberately ONE catch-all rule. Unlike the linkding tunnel — which names a
+    # hostname per service and bypasses Traefik — everything here is handed to
+    # Traefik, which does all Host-based routing via IngressRoute CRDs.
+    #
+    # Consequence: adding a service never touches this file. It is one IngressRoute
+    # in Git and one DNS record. This ConfigMap should stay static.
+    #
+    # Host header is preserved by cloudflared, which is what lets Traefik route.
+    ingress:
+    - service: http://traefik.kube-system.svc.cluster.local:80

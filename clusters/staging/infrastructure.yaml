@@ -29,3 +29,11 @@ spec:
     name: flux-system
   path: ./infrastructure/configs/staging
   prune: true
+  # ADDED: without this, the SOPS-encrypted cloudflare-api-token secret in
+  # infrastructure/configs/staging is applied still-encrypted and cert-manager
+  # cannot read it. Mirrors the block already on the `apps` Kustomization; the
+  # `sops-age` secret in flux-system already exists and is what `apps` uses.
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
