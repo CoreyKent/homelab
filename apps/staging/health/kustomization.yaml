@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: health
+resources:
+  - ../../base/health/
+  # Co-located so the Cluster's managed roles get their SOPS-encrypted credentials in one apply.
+  - pg-qs-writer.secret.yaml
+  - pg-qs-reader.secret.yaml
+  - cluster.yaml
+  - migrations.yaml
+  - migrate-job.yaml
+  - backup-pvc.yaml
+  - pgdump-cronjob.yaml

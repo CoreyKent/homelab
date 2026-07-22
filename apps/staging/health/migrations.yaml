@@ -1,0 +1,166 @@
+# applied by Job pg-migrate-0001; idempotent wrapping so a Job re-run is safe; future migrations are new keys + new Jobs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pg-migrations
+data:
+  0001_init.sql: |
+    CREATE SCHEMA IF NOT EXISTS garmin; CREATE SCHEMA IF NOT EXISTS withings; CREATE SCHEMA IF NOT EXISTS ops;
+
+    -- local_date is a PLAIN column set by the collector at ingestion (Australia/Sydney),
+    -- not a generated column: generated columns require IMMUTABLE functions and AT TIME ZONE
+    -- is only STABLE — declaring it IMMUTABLE anyway is a correctness lie (audit finding, cut).
+
+    CREATE TABLE IF NOT EXISTS garmin.daily_summary (
+      calendar_date     date PRIMARY KEY,          -- Garmin device-local day
+      steps             integer,
+      resting_hr        smallint,                  -- bpm
+      stress_avg        smallint,                  -- 0-100
+      calories_active   integer,                   -- kcal
+      calories_total    integer,                   -- kcal
+      body_battery_high smallint, body_battery_low smallint,
+      raw               jsonb,
+      ingested_at       timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS garmin.sleep (
+      calendar_date  date PRIMARY KEY,             -- wake-date key: midnight-safe
+      sleep_start    timestamptz, sleep_end timestamptz,
+      duration_s     integer, deep_s integer, light_s integer, rem_s integer, awake_s integer,
+      score          smallint, avg_spo2 real, avg_respiration real,
+      raw            jsonb, ingested_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS garmin.sleep_stage (
+      calendar_date  date NOT NULL REFERENCES garmin.sleep(calendar_date) ON DELETE CASCADE,
+      start_ts       timestamptz NOT NULL, end_ts timestamptz NOT NULL,
+      stage          text NOT NULL CHECK (stage IN ('deep','light','rem','awake')),
+      PRIMARY KEY (calendar_date, start_ts)
+    );
+
+    CREATE TABLE IF NOT EXISTS garmin.hrv (
+      calendar_date date PRIMARY KEY,
+      last_night_avg_ms smallint, weekly_avg_ms smallint,
+      status text, baseline_low_ms smallint, baseline_high_ms smallint,
+      ingested_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS garmin.training_status (
+      calendar_date date PRIMARY KEY,
+      status text, vo2max real, load_7d real, raw jsonb,
+      ingested_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS garmin.activity (
+      activity_id      bigint PRIMARY KEY,          -- vendor-native natural key
+      start_ts         timestamptz NOT NULL,
+      local_date       date NOT NULL,               -- collector-computed (Australia/Sydney)
+      activity_type    text NOT NULL, name text,
+      duration_s       integer, distance_m real, calories integer,
+      avg_hr smallint, max_hr smallint, elevation_gain_m real,
+      avg_pace_s_km    real, hr_zones jsonb, raw jsonb,
+      ingested_at      timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS activity_type_ts ON garmin.activity (activity_type, start_ts DESC);
+    CREATE INDEX IF NOT EXISTS activity_local_date ON garmin.activity (local_date);
+
+    CREATE TABLE IF NOT EXISTS garmin.intraday (                  -- generic scalar series
+      metric  text NOT NULL CHECK (metric IN
+              ('heart_rate','stress','body_battery','spo2','respiration')),
+      ts      timestamptz NOT NULL,
+      value   real NOT NULL,
+      PRIMARY KEY (metric, ts)
+    );
+    -- (no separate ts index: the composite PK serves every dashboard query pattern; a BRIN on ts
+    --  was cut — heap order follows (metric, ts) batches, killing BRIN's block-range correlation)
+
+    CREATE TABLE IF NOT EXISTS garmin.steps_epoch (
+      start_ts timestamptz PRIMARY KEY,
+      duration_s smallint NOT NULL, steps integer NOT NULL, activity_level text
+    );
+
+    CREATE TABLE IF NOT EXISTS withings.measurement (
+      group_id     bigint NOT NULL,                 -- Withings grpid
+      measure_type integer NOT NULL,                -- 1 weight, 5 FFM, 6 fat%, 8 fat kg, 76 muscle, 77 hydration, 88 bone…
+      metric       text NOT NULL,
+      ts           timestamptz NOT NULL,
+      local_date   date NOT NULL,                   -- collector-computed (Australia/Sydney)
+      value        numeric(8,3) NOT NULL,           -- normalized: value * 10^unit at ingestion
+      ingested_at  timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (group_id, measure_type)
+    );
+    CREATE INDEX IF NOT EXISTS measurement_metric_ts ON withings.measurement (metric, ts DESC);
+    CREATE INDEX IF NOT EXISTS measurement_metric_localdate ON withings.measurement (metric, local_date);
+
+    CREATE OR REPLACE VIEW withings.daily_weight AS            -- canonical: FIRST weigh-in of local day
+    SELECT DISTINCT ON (local_date) local_date, ts, value AS weight_kg
+    FROM withings.measurement WHERE metric = 'weight'
+    ORDER BY local_date, ts ASC, group_id ASC;      -- group_id = deterministic tie-break on equal ts
+
+    CREATE TABLE IF NOT EXISTS ops.sync_state (
+      source text NOT NULL, stream text NOT NULL,
+      watermark timestamptz NOT NULL,               -- re-fetch watermark - 72h (late arrivals)
+      blocked_until timestamptz,                    -- 429 state machine: runs no-op until passed.
+                                                    -- Garmin 429s are ACCOUNT-level: written to the
+                                                    -- ('garmin','_account') sentinel row, checked by
+                                                    -- ALL garmin streams before any call (audit fix)
+      extra jsonb, updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (source, stream)
+    );
+
+    CREATE TABLE IF NOT EXISTS ops.run_log (
+      run_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      source text NOT NULL, stream text NOT NULL,
+      kind text NOT NULL CHECK (kind IN ('cron','backfill')),
+      started_at timestamptz NOT NULL DEFAULT now(), finished_at timestamptz,
+      status text CHECK (status IN ('ok','partial','failed')),
+      days_attempted integer, days_failed integer, rows_upserted integer,
+      first_error text, details jsonb
+    );
+    CREATE INDEX IF NOT EXISTS run_log_source_started ON ops.run_log (source, started_at DESC);
+
+    -- Withings chain: refresh under advisory lock; COMMIT new pair BEFORE first use
+    -- (old refresh token stays valid until the new access token is first used — crash-safe).
+    CREATE TABLE IF NOT EXISTS ops.withings_oauth_token (
+      singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+      access_token text NOT NULL, refresh_token text NOT NULL,
+      access_expires_at timestamptz NOT NULL,
+      refreshed_at timestamptz NOT NULL DEFAULT now(),
+      refresh_count integer NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS ops.garmin_session (
+      singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+      token_blob jsonb NOT NULL, refreshed_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    -- Goal values: seeded BY HAND via psql (never via Git-tracked migrations — public repo).
+    CREATE TABLE IF NOT EXISTS ops.goal (
+      metric      text PRIMARY KEY,                -- 'weight_kg'
+      target      numeric(8,3) NOT NULL,
+      target_date date,
+      note        text,
+      updated_at  timestamptz NOT NULL DEFAULT now()
+    );
+
+    -- Roles are created WITHOUT passwords here on purpose: this DDL lives in the PUBLIC repo, and
+    -- passwords belong in SOPS-encrypted Secrets. CNPG's declarative `managed.roles` (passwordSecret)
+    -- owns role creation + credentials; this migration only shapes GRANTs (audit fix).
+    GRANT USAGE ON SCHEMA garmin, withings TO qs_writer;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA garmin, withings TO qs_writer;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA garmin, withings
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO qs_writer;
+    -- ops: per-table for the writer — it must NOT touch ops.goal (hand-seeded, least-privilege):
+    GRANT USAGE ON SCHEMA ops TO qs_writer;
+    GRANT SELECT, INSERT, UPDATE, DELETE
+      ON ops.sync_state, ops.run_log, ops.withings_oauth_token, ops.garmin_session TO qs_writer;
+    GRANT SELECT ON ops.goal TO qs_writer;          -- read-only: goal is Corey's, not the collector's
+    -- reader: metric schemas broadly (future metric tables SHOULD be visible — deliberate),
+    -- ops strictly per-table; token tables have no reader path at all:
+    GRANT USAGE ON SCHEMA garmin, withings TO qs_reader;
+    GRANT SELECT ON ALL TABLES IN SCHEMA garmin, withings TO qs_reader;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA garmin, withings GRANT SELECT ON TABLES TO qs_reader;
+    GRANT USAGE ON SCHEMA ops TO qs_reader;
+    GRANT SELECT ON ops.run_log, ops.sync_state, ops.goal TO qs_reader;
+    -- no reader grant on token tables, and no ops-wide default privileges for either role:
+    -- a future ops table starts reachable by nobody until explicitly granted

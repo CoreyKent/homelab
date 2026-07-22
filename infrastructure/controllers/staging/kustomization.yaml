@@ -13,3 +13,4 @@ resources:
   - ./synology-csi/
   - ./cert-manager/
   - ./tailscale-operator/
+  - ./cnpg-operator/

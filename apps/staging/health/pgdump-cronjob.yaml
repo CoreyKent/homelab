@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-dump-nightly
+spec:
+  # 16:30 UTC = 02:30 Australia/Sydney during AEST; CronJob schedules run in UTC.
+  schedule: "30 16 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: pgdump
+              # Same image as the server guarantees matching client versions.
+              image: ghcr.io/cloudnative-pg/postgresql:18.4
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: health-pg-superuser
+                      key: password
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  pg_dump "host=health-pg-rw.health.svc user=postgres dbname=health" -Fc -f "/backups/health-$(date +%F).dump"
+                  # 30-day retention; the monthly restore drill lives in the runbook.
+                  find /backups -name '*.dump' -mtime +30 -delete
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: pg-backups

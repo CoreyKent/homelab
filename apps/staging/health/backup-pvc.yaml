@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-backups
+  annotations:
+    # A pruned backup PVC is the one irreversible loss in this set — exempt it from
+    # Flux garbage collection even if the file is ever moved or removed.
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: synology-iscsi-retain
+  resources:
+    requests:
+      storage: 20Gi

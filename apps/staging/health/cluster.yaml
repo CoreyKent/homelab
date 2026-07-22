@@ -1,0 +1,29 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: health-pg
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4 # Pinned operand.
+  # The migration Job connects as postgres via the generated health-pg-superuser secret.
+  enableSuperuserAccess: true
+  storage:
+    # storageClassName is always explicit; two StorageClasses are both marked default on this cluster.
+    storageClassName: synology-iscsi-retain
+    size: 20Gi
+  bootstrap:
+    initdb:
+      database: health
+      owner: qs_writer
+  managed:
+    roles:
+      - name: qs_writer
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pg-qs-writer
+      - name: qs_reader
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pg-qs-reader

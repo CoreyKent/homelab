@@ -1,0 +1,54 @@
+# Jobs are immutable - future migrations ship as new Jobs (0002...), never edits to this one.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pg-migrate-0001
+spec:
+  backoffLimit: 3
+  # Hard ceiling so a never-ready dependency cannot leave the wait loops running forever.
+  activeDeadlineSeconds: 1800
+  # Completed Job kept for audit; ttlSecondsAfterFinished is deliberately unset.
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-postgres
+          image: ghcr.io/cloudnative-pg/postgresql:18.4
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              until pg_isready -h health-pg-rw.health.svc -U postgres; do
+                sleep 2
+              done
+      containers:
+        - name: migrate
+          # Same image as the server guarantees matching client versions.
+          image: ghcr.io/cloudnative-pg/postgresql:18.4
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: health-pg-superuser
+                  key: password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              # Wait for CNPG's managed-role reconciliation before running GRANTs: the
+              # migration references qs_reader/qs_writer, and racing them into a permanently
+              # Failed Job would wedge (Job specs are immutable to Flux re-apply).
+              until psql "host=health-pg-rw.health.svc user=postgres dbname=health" -tAc \
+                "SELECT count(*) FROM pg_roles WHERE rolname IN ('qs_reader','qs_writer')" | grep -qx 2; do
+                sleep 2
+              done
+              psql "host=health-pg-rw.health.svc user=postgres dbname=health" -v ON_ERROR_STOP=1 -f /migrations/0001_init.sql
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+      volumes:
+        - name: migrations
+          configMap:
+            name: pg-migrations
