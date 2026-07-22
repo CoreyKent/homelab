@@ -8,8 +8,8 @@ spec:
   # The migration Job connects as postgres via the generated health-pg-superuser secret.
   enableSuperuserAccess: true
   storage:
-    # storageClassName is always explicit; two StorageClasses are both marked default on this cluster.
-    storageClassName: synology-iscsi-retain
+    # storageClass is always explicit; two StorageClasses are both marked default on this cluster.
+    storageClass: synology-iscsi-retain
     size: 20Gi
   bootstrap:
     initdb:
