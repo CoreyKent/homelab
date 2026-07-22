@@ -12,3 +12,4 @@ kind: Kustomization
 resources:
   - ./synology-csi/
   - ./cert-manager/
+  - ./tailscale-operator/

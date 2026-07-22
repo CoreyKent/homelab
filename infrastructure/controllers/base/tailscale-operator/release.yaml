@@ -1,0 +1,31 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: tailscale-operator
+  namespace: tailscale
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: tailscale-operator
+      # Newest version in the Tailscale Helm index as of 2026-07-22.
+      version: "1.98.9"
+      sourceRef:
+        kind: HelmRepository
+        name: tailscale
+        namespace: tailscale
+      interval: 12h
+  install:
+    crds: Create
+  upgrade:
+    crds: CreateReplace
+  driftDetection:
+    mode: enabled
+  values:
+    # OAuth credentials come from the pre-created, SOPS-encrypted `operator-oauth`
+    # secret in the staging overlay (co-located under infra-controllers so it
+    # applies WITH the operator — avoids an infra-configs dependsOn deadlock).
+    # Leaving clientId empty makes the chart consume that secret rather than
+    # manage its own: templates/oauth-secret.yaml is gated on oauth.clientId.
+    oauth:
+      clientId: ""

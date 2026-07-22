@@ -12,6 +12,15 @@ spec:
     name: flux-system
   path: ./infrastructure/controllers/staging
   prune: true
+  # ADDED: the tailscale-operator's SOPS-encrypted `operator-oauth` secret lives
+  # under this path (co-located with the operator so it applies in the same
+  # Kustomization, avoiding a dependsOn deadlock). Without this block that secret
+  # would be applied still-encrypted. Mirrors the `apps`/`infra-configs` blocks;
+  # the `sops-age` secret in flux-system already exists.
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

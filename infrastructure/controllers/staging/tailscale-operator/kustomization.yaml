@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base/tailscale-operator/
+  # Env-specific, SOPS-encrypted OAuth credentials for the operator. Co-located
+  # here (not in infra-configs) so it applies in the same Flux Kustomization as
+  # the operator that consumes it. Requires `decryption` on the infra-controllers
+  # Kustomization (added in clusters/staging/infrastructure.yaml).
+  - operator-oauth.secret.yaml
