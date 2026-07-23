@@ -34,13 +34,26 @@ class _TokenChain:
     access_expires_at: datetime
 
 
-def get_access_token(conn: psycopg.Connection, cfg: Config) -> str:
-    """Return a currently usable Withings access token, refreshing the shared chain if needed."""
+def get_access_token(
+    conn: psycopg.Connection,
+    cfg: Config,
+    force_refresh: bool = False,
+    stale_token: str | None = None,
+) -> str:
+    """Return a currently usable Withings access token, refreshing the shared chain if needed.
+
+    force_refresh exists because Withings keeps ONE active access token per (user, app):
+    an unrelated chain's refresh (empirically: HealthData's twice-daily sync, 23/07/2026)
+    invalidates this chain's access token mid-lifetime, so the stored expiry cannot be
+    trusted after a body-status 401. Callers pass the rejected token as stale_token; if a
+    concurrent pod already minted a different token while we waited on the lock, that one
+    is returned instead of burning another refresh.
+    """
     try:
         with conn.cursor() as cur:
             chain = _load_token_chain(cur)
 
-        if _is_fresh(chain.access_expires_at):
+        if not force_refresh and _is_fresh(chain.access_expires_at):
             conn.commit()
             return chain.access_token
 
@@ -53,7 +66,9 @@ def get_access_token(conn: psycopg.Connection, cfg: Config) -> str:
 
             # Another pod may have refreshed while this pod was waiting on the lock.
             chain = _load_token_chain(cur)
-            if _is_fresh(chain.access_expires_at):
+            if _is_fresh(chain.access_expires_at) and not (
+                force_refresh and chain.access_token == stale_token
+            ):
                 conn.commit()
                 return chain.access_token
 

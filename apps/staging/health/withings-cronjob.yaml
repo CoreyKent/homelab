@@ -8,7 +8,7 @@ spec:
   schedule: "15 * * * *"
   # Flux owns this object; enablement happens via a Git commit in Phase 4, never via kubectl,
   # because a hand-patch would be reverted on the next reconciliation.
-  suspend: true
+  suspend: false
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   jobTemplate:
@@ -19,7 +19,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: collector
-              image: 192.168.50.81:30500/health-collector:0.1.0@sha256:e85b207c47bc16eae9a872f1eef4eb4eaf677ffc63c07da97391f71212e5acd4
+              image: 192.168.50.81:30500/health-collector:0.1.1@sha256:08839cb0e747df4f34f6d4fbb01dd17d0a05deb24fa1e05851a07c63d7350ba9
               args: ["withings"]
               env:
                 - name: PGUSER

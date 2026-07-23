@@ -4,4 +4,4 @@ This module stays import-light on purpose: tests must be able to import package 
 without pulling optional runtime dependencies such as database drivers or API clients.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

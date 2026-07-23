@@ -170,11 +170,19 @@ def discover_account_start_withings(
         window_end_date = today - timedelta(days=365 * (k - 1))
 
         budget.spend()
-        groups = withings_sync.fetch_measure_groups(
-            token,
-            datetime.combine(window_start_date, time.min, tzinfo=timezone.utc),
-            datetime.combine(window_end_date, time.min, tzinfo=timezone.utc),
-        )
+        window_start_dt = datetime.combine(window_start_date, time.min, tzinfo=timezone.utc)
+        window_end_dt = datetime.combine(window_end_date, time.min, tzinfo=timezone.utc)
+        try:
+            groups = withings_sync.fetch_measure_groups(token, window_start_dt, window_end_dt)
+        except withings_sync.WithingsAPIError as exc:
+            if getattr(exc, "status", None) != 401:
+                raise
+            # Cross-chain access invalidation (see withings_auth.get_access_token docstring):
+            # reactive refresh, one retry per probe window.
+            token = withings_auth.get_access_token(
+                conn, cfg, force_refresh=True, stale_token=token
+            )
+            groups = withings_sync.fetch_measure_groups(token, window_start_dt, window_end_dt)
 
         if groups is None:
             logger.debug(

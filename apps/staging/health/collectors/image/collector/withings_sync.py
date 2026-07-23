@@ -302,7 +302,18 @@ def sync_range(conn: psycopg.Connection, cfg: Config, start: datetime, end: date
     if not isinstance(access_token, str) or access_token == "":
         raise RuntimeError("withings_auth.get_access_token returned an empty token")
 
-    groups = fetch_measure_groups(access_token, start, end)
+    try:
+        groups = fetch_measure_groups(access_token, start, end)
+    except WithingsAPIError as exc:
+        if getattr(exc, "status", None) != 401:
+            raise
+        # Withings keeps one active access token per (user, app): another chain's refresh
+        # (e.g. HealthData's sync) invalidates ours mid-lifetime. Reactive refresh, ONE retry;
+        # a second 401 is a real auth failure and raises.
+        access_token = withings_auth.get_access_token(
+            conn, cfg, force_refresh=True, stale_token=access_token
+        )
+        groups = fetch_measure_groups(access_token, start, end)
     if not groups:
         logger.info(
             "Withings measurement sync skipped: no data for %s to %s",
