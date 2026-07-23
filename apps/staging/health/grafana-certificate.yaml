@@ -1,0 +1,21 @@
+# Per-service prod cert (itpm pattern): traefik resolves TLS secrets in the
+# IngressRoute's OWN namespace (allowCrossNamespace is off), and the shared
+# *.tessarack.dev wildcard is still on the staging issuer. DNS-01 via the
+# cloudflare-api-token ClusterIssuer path.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: health-tessarack-dev
+spec:
+  secretName: health-tessarack-dev-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - health.tessarack.dev
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  duration: 2160h    # 90d
+  renewBefore: 720h  # 30d

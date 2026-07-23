@@ -1,0 +1,19 @@
+# Tailnet-only exposure via the shared tessarack-ingress node (100.91.68.85):
+# cloud DNS resolves the name everywhere, but the address routes only for
+# tailnet members. L4 passthrough at the operator means traefik serves the
+# cert below itself.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`health.tessarack.dev`)
+      kind: Rule
+      services:
+        - name: grafana
+          port: 3000
+  tls:
+    secretName: health-tessarack-dev-tls

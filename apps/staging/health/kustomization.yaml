@@ -20,6 +20,8 @@ resources:
   - grafana-admin.secret.yaml
   - grafana-deployment.yaml
   - grafana-service.yaml
+  - grafana-certificate.yaml
+  - grafana-ingressroute.yaml
   - grafana-ini.yaml
   - grafana-datasource.yaml
   - grafana-dashboards-provider.yaml
