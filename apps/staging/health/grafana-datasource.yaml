@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+data:
+  postgres.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Health-PG
+        uid: health-pg
+        type: postgres
+        access: proxy
+        url: health-pg-rw.health.svc:5432
+        user: $__env{PG_READER_USER}
+        secureJsonData:
+          password: $__env{PG_READER_PASSWORD}
+        jsonData:
+          database: health
+          sslmode: disable
+          postgresVersion: 1800
+          timescaledb: false
+        isDefault: true
+        editable: false

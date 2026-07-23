@@ -1,0 +1,943 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-garmin
+data:
+  garmin.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "fiscalYearStartMonth": 0,
+      "id": null,
+      "panels": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "locale"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "steps"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#3987e5"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "legend": {
+              "showLegend": false
+            },
+            "xTickLabelSpacing": 100
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT calendar_date AS \"time\", steps FROM garmin.daily_summary WHERE $__timeFilter(calendar_date) ORDER BY 1",
+              "refId": "A"
+            }
+          ],
+          "title": "Daily Steps",
+          "type": "barchart"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bpm"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "resting hr"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#d55181"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "legend": {
+              "showLegend": false
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT calendar_date AS \"time\", resting_hr AS \"resting hr\" FROM garmin.daily_summary WHERE $__timeFilter(calendar_date) ORDER BY 1",
+              "refId": "A"
+            }
+          ],
+          "title": "Resting HR (bpm)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2
+              },
+              "max": 100,
+              "min": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "stress"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#d95926"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "body battery high"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#199e70"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "body battery low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#199e70"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
+          "id": 3,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT calendar_date AS \"time\", stress_avg AS \"stress\", body_battery_high AS \"body battery high\", body_battery_low AS \"body battery low\" FROM garmin.daily_summary WHERE $__timeFilter(calendar_date) ORDER BY 1",
+              "refId": "A"
+            }
+          ],
+          "title": "Stress & Body Battery (0-100)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "description": "Zoom to a day for detail",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bpm"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "heart rate"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#d55181"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "id": 4,
+          "options": {
+            "legend": {
+              "showLegend": false
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", value AS \"heart rate\" FROM garmin.intraday WHERE metric='heart_rate' AND $__timeFilter(ts) ORDER BY 1",
+              "refId": "A"
+            }
+          ],
+          "title": "Intraday Heart Rate (bpm)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "description": "Zoom to a day for detail",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "stress"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#d95926"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "body battery"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#199e70"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "id": 5,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", value AS \"stress\" FROM garmin.intraday WHERE metric='stress' AND $__timeFilter(ts) ORDER BY 1",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", value AS \"body battery\" FROM garmin.intraday WHERE metric='body_battery' AND $__timeFilter(ts) ORDER BY 1",
+              "refId": "B"
+            }
+          ],
+          "title": "Intraday Stress & Body Battery (0-100)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "h"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "deep"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#3987e5"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "light"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#199e70"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "rem"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#9085e9"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "awake"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#c98500"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 16
+          },
+          "id": 6,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "stacking": "normal",
+            "xTickLabelSpacing": 100
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT calendar_date AS \"time\", deep_s/3600.0 AS \"deep\", light_s/3600.0 AS \"light\", rem_s/3600.0 AS \"rem\", awake_s/3600.0 AS \"awake\" FROM garmin.sleep WHERE $__timeFilter(calendar_date) ORDER BY 1",
+              "refId": "A"
+            }
+          ],
+          "title": "Sleep Stages (h)",
+          "type": "barchart"
+        },
+        {
+          "id": 7,
+          "type": "stat",
+          "title": "Sleep Score",
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 8,
+            "h": 5
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "min": 0,
+              "max": 100,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT calendar_date AS \"time\", score FROM garmin.sleep WHERE $__timeFilter(calendar_date) ORDER BY 1",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "HRV (ms) — nightly vs weekly + baseline band",
+          "gridPos": {
+            "x": 0,
+            "y": 29,
+            "w": 24,
+            "h": 8
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "nightly"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#9085e9",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "baseline high"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#9085e9",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.fillBelowTo",
+                    "value": "baseline low"
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 15
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "baseline low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#9085e9",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT calendar_date AS \"time\", last_night_avg_ms AS \"nightly\", weekly_avg_ms AS \"weekly\", baseline_low_ms AS \"baseline low\", baseline_high_ms AS \"baseline high\" FROM garmin.hrv WHERE $__timeFilter(calendar_date) ORDER BY 1",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "type": "stat",
+          "title": "Training Status",
+          "gridPos": {
+            "x": 8,
+            "y": 24,
+            "w": 8,
+            "h": 5
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "/.*/"
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT split_part(jsonb_path_query_first(raw, '$.**.trainingStatusFeedbackPhrase') #>> '{}', '_', 1) AS status FROM garmin.training_status WHERE jsonb_path_query_first(raw, '$.**.trainingStatusFeedbackPhrase') IS NOT NULL ORDER BY calendar_date DESC LIMIT 1",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "VO2max",
+          "gridPos": {
+            "x": 16,
+            "y": 24,
+            "w": 8,
+            "h": 5
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "/.*/"
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT vo2max FROM garmin.training_status WHERE vo2max IS NOT NULL ORDER BY calendar_date DESC LIMIT 1",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 11,
+          "type": "table",
+          "title": "Activities",
+          "gridPos": {
+            "x": 0,
+            "y": 37,
+            "w": 24,
+            "h": 9
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT local_date AS \"Date\", activity_type AS \"Type\", name AS \"Name\", ROUND((duration_s/60.0)::numeric,1) AS \"Duration (min)\", ROUND((distance_m/1000.0)::numeric,2) AS \"Distance (km)\", calories AS \"kcal\", avg_hr AS \"Avg HR\", max_hr AS \"Max HR\", CASE WHEN avg_pace_s_km IS NULL THEN NULL ELSE to_char(make_interval(secs => avg_pace_s_km), 'MI:SS') END AS \"Pace (min/km)\", ROUND(elevation_gain_m::numeric,0) AS \"Elev (m)\" FROM garmin.activity WHERE $__timeFilter(start_ts) AND activity_type IN ($activity_type) ORDER BY start_ts DESC",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 12,
+          "type": "barchart",
+          "title": "Weekly Active Calories (kcal)",
+          "gridPos": {
+            "x": 0,
+            "y": 46,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "kcal"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "active kcal"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#c98500",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": false,
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "xTickLabelSpacing": 100
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT date_trunc('week', calendar_date) AS \"time\", sum(calories_active) AS \"active kcal\" FROM garmin.daily_summary WHERE $__timeFilter(calendar_date) GROUP BY 1 ORDER BY 1",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "Overnight SpO2 (%) & Respiration (brpm)",
+          "gridPos": {
+            "x": 12,
+            "y": 46,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "SpO2"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#3987e5",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "respiration"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#199e70",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", value AS \"SpO2\" FROM garmin.intraday WHERE metric='spo2' AND $__timeFilter(ts) ORDER BY 1",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", value AS \"respiration\" FROM garmin.intraday WHERE metric='respiration' AND $__timeFilter(ts) ORDER BY 1",
+              "refId": "B"
+            }
+          ]
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 41,
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "postgres",
+              "uid": "health-pg"
+            },
+            "definition": "SELECT DISTINCT activity_type FROM garmin.activity ORDER BY 1",
+            "includeAll": true,
+            "label": "Activity type",
+            "multi": true,
+            "name": "activity_type",
+            "options": [],
+            "query": "SELECT DISTINCT activity_type FROM garmin.activity ORDER BY 1",
+            "refresh": 2,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-30d",
+        "to": "now"
+      },
+      "timezone": "Australia/Sydney",
+      "title": "Garmin",
+      "uid": "garmin",
+      "version": 1,
+      "weekStart": ""
+    }

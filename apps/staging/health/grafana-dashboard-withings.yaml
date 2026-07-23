@@ -1,0 +1,693 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-withings
+data:
+  withings.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          },
+          {
+            "datasource": {
+              "type": "postgres",
+              "uid": "health-pg"
+            },
+            "enable": true,
+            "format": "table",
+            "hide": false,
+            "iconColor": "rgba(201, 133, 0, 1)",
+            "name": "Goal date",
+            "rawQuery": "SELECT EXTRACT(EPOCH FROM g.target_date::timestamp)*1000 AS time, 'Goal: ' || g.target || ' kg' AS text FROM ops.goal g WHERE g.metric = 'weight_kg' AND g.target_date IS NOT NULL",
+            "rawSql": "SELECT EXTRACT(EPOCH FROM g.target_date::timestamp)*1000 AS time, 'Goal: ' || g.target || ' kg' AS text FROM ops.goal g WHERE g.metric = 'weight_kg' AND g.target_date IS NOT NULL",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "lineWidth": 1,
+                "pointSize": 3,
+                "showPoints": "never"
+              },
+              "unit": "masskg"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "weight"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#3987e5",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.showPoints",
+                    "value": "always"
+                  },
+                  {
+                    "id": "custom.pointSize",
+                    "value": 3
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "7d avg"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#3987e5",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 3
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.showPoints",
+                    "value": "never"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Goal"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#c98500",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.showPoints",
+                    "value": "never"
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "dash",
+                      "dash": [
+                        10,
+                        10
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT local_date AS \"time\", weight_kg AS \"weight\" FROM withings.daily_weight WHERE $__timeFilter(local_date) ORDER BY 1",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT * FROM (SELECT local_date AS \"time\", avg(weight_kg) OVER (ORDER BY local_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS \"7d avg\" FROM withings.daily_weight) s WHERE $__timeFilter(\"time\") ORDER BY 1",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT dw.local_date AS \"time\", g.target AS \"Goal\" FROM withings.daily_weight dw LEFT JOIN ops.goal g ON g.metric = 'weight_kg' WHERE $__timeFilter(dw.local_date) ORDER BY 1",
+              "refId": "C"
+            }
+          ],
+          "title": "Weight (kg) — daily, 7d avg, goal",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "No goal set",
+              "unit": "masskg"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 0,
+            "y": 9
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT (SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) - g.target AS \"kg to goal\" FROM ops.goal g WHERE g.metric = 'weight_kg'",
+              "refId": "A"
+            }
+          ],
+          "title": "Distance to Goal (kg)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 2,
+              "noValue": "No goal set"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 6,
+            "y": 9
+          },
+          "id": 3,
+          "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT ((SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) - g.target) / NULLIF(EXTRACT(EPOCH FROM (g.target_date::timestamp - now())) / 604800.0, 0) AS \"kg/week\" FROM ops.goal g WHERE g.metric = 'weight_kg' AND g.target_date IS NOT NULL",
+              "refId": "A"
+            }
+          ],
+          "title": "Required Pace (kg/week)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "points",
+                "fillOpacity": 0,
+                "lineWidth": 0,
+                "pointSize": 5,
+                "showPoints": "always"
+              },
+              "unit": "masskg"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "weight"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#3987e5",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "id": 4,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", value AS \"weight\" FROM withings.measurement WHERE metric = 'weight' AND $__timeFilter(ts) ORDER BY 1",
+              "refId": "A"
+            }
+          ],
+          "title": "Weigh-ins (kg) — every measurement",
+          "type": "timeseries"
+        },
+        {
+          "id": 5,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "type": "timeseries",
+          "title": "Body Fat (%)",
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "always",
+                "pointSize": 4,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "fat %"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#d95926"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", value AS \"fat %\" FROM withings.measurement WHERE metric = 'fat_ratio' AND $__timeFilter(ts) ORDER BY 1;",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 16
+          },
+          "type": "timeseries",
+          "title": "Composition (kg) — fat / muscle / hydration / bone",
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "masskg",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 40,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "fat"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#d95926"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "muscle"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#199e70"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "hydration"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#c98500"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "bone"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#d55181"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", avg(value) FILTER (WHERE metric='fat_mass') AS \"fat\", avg(value) FILTER (WHERE metric='muscle_mass') AS \"muscle\", avg(value) FILTER (WHERE metric='hydration') AS \"hydration\", avg(value) FILTER (WHERE metric='bone_mass') AS \"bone\" FROM withings.measurement WHERE metric IN ('fat_mass','muscle_mass','hydration','bone_mass') AND $__timeFilter(ts) GROUP BY ts ORDER BY 1;",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 0,
+            "y": 24
+          },
+          "type": "stat",
+          "title": "BMI",
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 1,
+              "noValue": "No height set"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "wideLayout": true,
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT (SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) / NULLIF(g.target * g.target, 0) AS \"BMI\" FROM ops.goal g WHERE g.metric = 'height_m';",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "gridPos": {
+            "h": 8,
+            "w": 18,
+            "x": 6,
+            "y": 24
+          },
+          "type": "table",
+          "title": "All Weigh-ins",
+          "datasource": {
+            "type": "postgres",
+            "uid": "health-pg"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Weight (kg)"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "masskg"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#3987e5"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "postgres",
+                "uid": "health-pg"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS \"Time\", local_date AS \"Date\", value AS \"Weight (kg)\" FROM withings.measurement WHERE metric = 'weight' AND $__timeFilter(ts) ORDER BY ts DESC;",
+              "refId": "A"
+            }
+          ]
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 41,
+      "tags": [],
+      "templating": {
+        "list": []
+      },
+      "time": {
+        "from": "now-90d",
+        "to": "now"
+      },
+      "timezone": "Australia/Sydney",
+      "title": "Withings",
+      "uid": "withings",
+      "version": 1,
+      "weekStart": ""
+    }

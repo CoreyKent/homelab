@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:13.1.1
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+            - name: PG_READER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pg-qs-reader
+                  key: username
+            - name: PG_READER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pg-qs-reader
+                  key: password
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: grafana-ini
+              mountPath: /etc/grafana/grafana.ini
+              subPath: grafana.ini
+              readOnly: true
+            - name: grafana-datasource
+              mountPath: /etc/grafana/provisioning/datasources/
+              readOnly: true
+            - name: grafana-dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards/
+              readOnly: true
+            - name: grafana-storage
+              mountPath: /var/lib/grafana
+            - name: grafana-dashboard-garmin
+              mountPath: /var/lib/grafana/dashboards/garmin.json
+              subPath: garmin.json
+              readOnly: true
+            - name: grafana-dashboard-withings
+              mountPath: /var/lib/grafana/dashboards/withings.json
+              subPath: withings.json
+              readOnly: true
+            - name: grafana-dashboard-overview
+              mountPath: /var/lib/grafana/dashboards/overview.json
+              subPath: overview.json
+              readOnly: true
+      volumes:
+        - name: grafana-ini
+          configMap:
+            name: grafana-ini
+        - name: grafana-datasource
+          configMap:
+            name: grafana-datasource
+        - name: grafana-dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        # Stateless by decision: all state comes from Git; UI edits are structurally
+        # forbidden (allowUiUpdates = false), so a PVC would only preserve state we forbid.
+        - name: grafana-storage
+          emptyDir: {}
+        - name: grafana-dashboard-garmin
+          configMap:
+            name: grafana-dashboard-garmin
+        - name: grafana-dashboard-withings
+          configMap:
+            name: grafana-dashboard-withings
+        - name: grafana-dashboard-overview
+          configMap:
+            name: grafana-dashboard-overview

@@ -16,4 +16,14 @@ resources:
   - pgdump-cronjob.yaml
   - garmin-cronjob.yaml
   - withings-cronjob.yaml
+  # Grafana admin secret — sealed by the orchestrator; referenced here, never authored by the builder.
+  - grafana-admin.secret.yaml
+  - grafana-deployment.yaml
+  - grafana-service.yaml
+  - grafana-ini.yaml
+  - grafana-datasource.yaml
+  - grafana-dashboards-provider.yaml
+  - grafana-dashboard-garmin.yaml
+  - grafana-dashboard-withings.yaml
+  - grafana-dashboard-overview.yaml
 # backfill-job.yaml is intentionally excluded: it is a manual kubectl create -f template, and Jobs are immutable.
