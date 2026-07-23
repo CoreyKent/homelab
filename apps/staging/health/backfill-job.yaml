@@ -1,0 +1,58 @@
+# Template for manual, budgeted historical backfill runs.
+# Jobs are immutable and run as soon as they are created, so this file is intentionally NOT
+# referenced by kustomization.yaml.
+# Use kubectl create -f after editing metadata.name to a unique health-backfill-<source>-<yyyymmdd>.
+# Run only while the matching CronJob is still suspended or outside its window; overlapping
+# upserts are harmless, but budget accounting is cleaner when the backfill runs uncontended.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Edit this before every run so each historical backfill is an explicit, auditable Job object.
+  name: health-backfill-garmin-YYYYMMDD
+  # This file is applied by hand with kubectl create -f, not through the kustomization overlay,
+  # so it must carry its own namespace.
+  namespace: health
+spec:
+  # The cursor makes re-runs cheap and explicit; Kubernetes retries would silently double-spend
+  # the budget for a manual backfill.
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: collector
+          image: 192.168.50.81:30500/health-collector:0.1.0@sha256:e85b207c47bc16eae9a872f1eef4eb4eaf677ffc63c07da97391f71212e5acd4
+          args: ["backfill", "--source", "garmin", "--chunk-days", "30", "--budget", "500"]
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: pg-qs-writer
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pg-qs-writer
+                  key: password
+            - name: WITHINGS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: withings-app
+                  key: WITHINGS_CLIENT_ID
+            - name: WITHINGS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: withings-app
+                  key: WITHINGS_CLIENT_SECRET
+          # PGHOST/PGPORT/PGDATABASE/GARMIN_SEED_PATH/TZ_LOCAL/GARMIN_PACING_MIN are deliberately
+          # omitted because the collector defaults already match this cluster.
+          # This template serves both sources: switch --source to withings and the extra env is
+          # already wired; the Garmin seed mount is simply ignored by withings runs.
+          volumeMounts:
+            - name: garmin-seed
+              mountPath: /garmin-seed
+              readOnly: true
+      volumes:
+        - name: garmin-seed
+          secret:
+            secretName: garmin-tokenstore

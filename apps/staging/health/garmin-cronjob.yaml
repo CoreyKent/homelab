@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: garmin-collector
+spec:
+  # Never run tighter than every 30 minutes: Garmin enforces account-level 429 blocking, so
+  # conservative spacing reduces the chance of tripping a lockout that aborts all Garmin work.
+  schedule: "*/30 * * * *"
+  # Flux owns this object; enablement happens via a Git commit in Phase 4, never via kubectl,
+  # because a hand-patch would be reverted on the next reconciliation.
+  suspend: true
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: collector
+              image: 192.168.50.81:30500/health-collector:0.1.0@sha256:e85b207c47bc16eae9a872f1eef4eb4eaf677ffc63c07da97391f71212e5acd4
+              args: ["garmin"]
+              env:
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-writer
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-writer
+                      key: password
+              # PGHOST/PGPORT/PGDATABASE/GARMIN_SEED_PATH/TZ_LOCAL/GARMIN_PACING_MIN are
+              # deliberately omitted because the collector defaults already match this cluster.
+              # WITHINGS_* are deliberately absent: Garmin runs must not depend on the Withings
+              # app secret, which is only required for withings mode.
+              volumeMounts:
+                - name: garmin-seed
+                  mountPath: /garmin-seed
+                  readOnly: true
+          volumes:
+            # This Secret is created by the operator's workstation bootstrap and is not expected
+            # to exist at commit time. That is safe because the CronJob ships suspended, so no pod
+            # is scheduled before bootstrap can provision the tokenstore.
+            - name: garmin-seed
+              secret:
+                secretName: garmin-tokenstore

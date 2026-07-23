@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: withings-collector
+spec:
+  # Hourly at :15 is sufficient because Withings' server-side sync commonly lags by 1-2 days;
+  # polling faster does not materially improve freshness.
+  schedule: "15 * * * *"
+  # Flux owns this object; enablement happens via a Git commit in Phase 4, never via kubectl,
+  # because a hand-patch would be reverted on the next reconciliation.
+  suspend: true
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: collector
+              image: 192.168.50.81:30500/health-collector:0.1.0@sha256:e85b207c47bc16eae9a872f1eef4eb4eaf677ffc63c07da97391f71212e5acd4
+              args: ["withings"]
+              env:
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-writer
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-writer
+                      key: password
+                - name: WITHINGS_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: withings-app
+                      key: WITHINGS_CLIENT_ID
+                - name: WITHINGS_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: withings-app
+                      key: WITHINGS_CLIENT_SECRET
+              # PGHOST/PGPORT/PGDATABASE/TZ_LOCAL are deliberately omitted because the collector
+              # defaults already match this cluster.
+              # No Garmin seed volume is mounted here: token-only Garmin material never lands in
+              # pods that do not need it.

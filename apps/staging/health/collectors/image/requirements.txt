@@ -1,0 +1,4 @@
+# All runtime dependencies are pinned exactly; updates are renovate-by-hand.
+garminconnect==0.3.6
+psycopg[binary]==3.2.13
+requests==2.34.2
