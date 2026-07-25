@@ -30,6 +30,12 @@ data:
             siteMonitor: https://health.tessarack.dev
             description: Metrics & dashboards
             icon: grafana.png
+            widget:
+              type: grafana
+              version: 2
+              url: http://grafana.health.svc.cluster.local:3000
+              username: "{{HOMEPAGE_VAR_GRAFANA_USERNAME}}"
+              password: "{{HOMEPAGE_VAR_GRAFANA_PASSWORD}}"
         - Mealie:
             href: https://mealie.tessarack.dev
             siteMonitor: https://mealie.tessarack.dev
@@ -45,6 +51,15 @@ data:
             description: Life OS dashboard
             icon: mdi-pulse
     - Infrastructure:
+        - Proxmox:
+            href: https://192.168.50.117:8006
+            description: tessarack-lab02
+            icon: proxmox.png
+            widget:
+              type: proxmox
+              url: https://192.168.50.117:8006
+              username: "{{HOMEPAGE_VAR_PROXMOX_USERNAME}}"
+              password: "{{HOMEPAGE_VAR_PROXMOX_PASSWORD}}"
         - Synology NAS:
             href: https://192.168.50.127:5001
             description: DSM / storage
@@ -53,11 +68,6 @@ data:
             href: http://192.168.50.1
             description: RT-AX86S
             icon: mdi-router-wireless
-        # Fill in your Proxmox URL and uncomment to add it as a link:
-        # - Proxmox:
-        #     href: https://YOUR-PROXMOX-HOST:8006
-        #     description: Virtualization
-        #     icon: proxmox.png
   widgets.yaml: |
     - kubernetes:
         cluster:
