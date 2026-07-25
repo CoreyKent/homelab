@@ -1,0 +1,19 @@
+# PRIVATE route: entryPoint websecure (:443) + tls, reached only by tailnet
+# clients via the shared tessarack-ingress node (100.91.68.85). Traefik serves
+# the cert below. Homepage has NO built-in auth, so it stays tailnet-only.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: homepage
+  namespace: homepage
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`homepage.tessarack.dev`)
+      kind: Rule
+      services:
+        - name: homepage
+          port: 3000
+  tls:
+    secretName: homepage-tessarack-dev-tls

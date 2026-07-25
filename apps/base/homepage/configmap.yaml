@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage
+  namespace: homepage
+  labels:
+    app.kubernetes.io/name: homepage
+data:
+  kubernetes.yaml: |
+    mode: cluster
+    ingress: true
+    traefik: true
+  settings.yaml: |
+    title: Tessarack Homelab
+    headerStyle: clean
+    theme: dark
+    color: slate
+    layout:
+      Homelab:
+        style: row
+        columns: 4
+      Infrastructure:
+        style: row
+        columns: 4
+  docker.yaml: ""
+  services.yaml: |
+    - Homelab:
+        - Grafana:
+            href: https://health.tessarack.dev
+            siteMonitor: https://health.tessarack.dev
+            description: Metrics & dashboards
+            icon: grafana.png
+        - Mealie:
+            href: https://mealie.tessarack.dev
+            siteMonitor: https://mealie.tessarack.dev
+            description: Recipe manager
+            icon: mealie.png
+        - ITPM:
+            href: https://itpm.tessarack.dev
+            siteMonitor: https://itpm.tessarack.dev
+            description: IT project dashboard
+            icon: mdi-view-dashboard
+        - Pulse:
+            href: https://pulse.tessarack.dev
+            description: Life OS dashboard
+            icon: mdi-pulse
+    - Infrastructure:
+        - Synology NAS:
+            href: https://192.168.50.127:5001
+            description: DSM / storage
+            icon: synology.png
+        - ASUS Router:
+            href: http://192.168.50.1
+            description: RT-AX86S
+            icon: mdi-router-wireless
+        # Fill in your Proxmox URL and uncomment to add it as a link:
+        # - Proxmox:
+        #     href: https://YOUR-PROXMOX-HOST:8006
+        #     description: Virtualization
+        #     icon: proxmox.png
+  widgets.yaml: |
+    - kubernetes:
+        cluster:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+          label: tessarack
+        nodes:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+    - resources:
+        backend: kubernetes
+        expanded: true
+        cpu: true
+        memory: true
+    - search:
+        provider: duckduckgo
+        target: _blank
+    - openmeteo:
+        label: Canberra
+        latitude: -35.28
+        longitude: 149.13
+        units: metric
+        cache: 5
+    - datetime:
+        text_size: xl
+        format:
+          timeStyle: short
+          dateStyle: long
+  bookmarks.yaml: |
+    - Homelab:
+        - Homepage Docs:
+            - abbr: HP
+              href: https://gethomepage.dev
+  custom.css: ""
+  custom.js: ""
