@@ -30,12 +30,6 @@ data:
             siteMonitor: https://health.tessarack.dev
             description: Metrics & dashboards
             icon: grafana.png
-            widget:
-              type: grafana
-              version: 2
-              url: http://grafana.health.svc.cluster.local:3000
-              username: "{{HOMEPAGE_VAR_GRAFANA_USERNAME}}"
-              password: "{{HOMEPAGE_VAR_GRAFANA_PASSWORD}}"
         - Mealie:
             href: https://mealie.tessarack.dev
             siteMonitor: https://mealie.tessarack.dev
