@@ -28,7 +28,7 @@ data:
         - Grafana:
             href: https://health.tessarack.dev
             siteMonitor: https://health.tessarack.dev
-            description: Metrics & dashboards
+            description: Health metrics & dashboards
             icon: grafana.png
         - Mealie:
             href: https://mealie.tessarack.dev
@@ -38,20 +38,31 @@ data:
         - ITPM:
             href: https://itpm.tessarack.dev
             siteMonitor: https://itpm.tessarack.dev
-            description: IT project dashboard
+            description: ITPM Macro Dashboard
             icon: mdi-view-dashboard
         - Pulse:
             href: https://pulse.tessarack.dev
             description: Life OS dashboard
             icon: mdi-pulse
     - Infrastructure:
-        - Proxmox:
+        - Proxmox lab01:
+            href: https://192.168.50.116:8006
+            description: tessarack-lab01
+            icon: proxmox.png
+            widget:
+              type: proxmox
+              url: https://192.168.50.116:8006
+              node: tessarack-lab01
+              username: "{{HOMEPAGE_VAR_PROXMOX_USERNAME}}"
+              password: "{{HOMEPAGE_VAR_PROXMOX_PASSWORD}}"
+        - Proxmox lab02:
             href: https://192.168.50.117:8006
             description: tessarack-lab02
             icon: proxmox.png
             widget:
               type: proxmox
               url: https://192.168.50.117:8006
+              node: tessarack-lab02
               username: "{{HOMEPAGE_VAR_PROXMOX_USERNAME}}"
               password: "{{HOMEPAGE_VAR_PROXMOX_PASSWORD}}"
         - Synology NAS:
