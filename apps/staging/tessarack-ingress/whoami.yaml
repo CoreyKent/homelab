@@ -69,6 +69,24 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: whoami-private
+  # AUTO-DISCOVERY CANARY (2026-07-26). homepage's kubernetes.yaml already has
+  # `ingress: true` + `traefik: true`, and its ClusterRole already grants
+  # get/list on traefik.io/ingressroutes -- but no object had ever carried these
+  # annotations, so discovery was unproven. This is the single-object test.
+  # If a "Discovered" group appears on the dashboard with a Whoami tile, the
+  # mechanism works and the hand-listed services.yaml entries can migrate to
+  # per-app annotations (delete the manual entry in the SAME commit as adding
+  # the annotation, or the tile will appear twice).
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/name: "Whoami"
+    gethomepage.dev/description: "Auto-discovery canary"
+    gethomepage.dev/group: "Discovered"
+    gethomepage.dev/icon: "mdi-test-tube"
+    # href pinned rather than inferred: Homepage parses Host() match rules
+    # unreliably, and an unresolvable href is indistinguishable from discovery
+    # having failed outright -- which would make this canary untrustworthy.
+    gethomepage.dev/href: "https://priv.tessarack.dev"
 spec:
   entryPoints:
     - websecure
