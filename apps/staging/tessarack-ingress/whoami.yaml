@@ -18,6 +18,20 @@ spec:
     metadata:
       labels:
         app: whoami
+        # Required for Homepage's status badge on the discovered tile. MEASURED
+        # 26/07/2026 from the homepage pod's own log:
+        #   "no pods found with namespace=tessarack-ingress and
+        #    labelSelector=app.kubernetes.io/name=whoami-private"
+        # Homepage derives the app name from the IngressRoute's metadata.name and
+        # looks for pods labelled app.kubernetes.io/name=<that name>. These pods
+        # carried only `app: whoami`, so discovery succeeded (the tile appeared)
+        # but the status lookup found nothing and rendered NOT FOUND.
+        # GENERAL RULE for migrating any app to annotation-based discovery: the
+        # pod template must carry app.kubernetes.io/name equal to the
+        # IngressRoute's name, or the tile shows NOT FOUND.
+        # .spec.selector is deliberately left as `app: whoami` -- a Deployment's
+        # selector is immutable, and adding a template label does not touch it.
+        app.kubernetes.io/name: whoami-private
     spec:
       containers:
       - name: whoami
