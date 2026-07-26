@@ -5,3 +5,4 @@ resources:
   - ../../base/gatus/
   - certificate.yaml
   - ingressroute.yaml
+  - gatus-secrets.secret.yaml

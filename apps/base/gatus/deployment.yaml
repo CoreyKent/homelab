@@ -29,6 +29,11 @@ spec:
         - name: gatus
           image: twinproduction/gatus:v5.36.0
           imagePullPolicy: IfNotPresent
+          # Supplies GATUS_NTFY_TOPIC. Gatus substitutes ${VAR} in config.yaml
+          # at load, so the topic never appears in the ConfigMap.
+          envFrom:
+            - secretRef:
+                name: gatus-secrets
           ports:
             - name: http
               containerPort: 8080
