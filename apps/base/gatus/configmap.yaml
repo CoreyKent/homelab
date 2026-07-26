@@ -48,6 +48,10 @@ data:
         interval: 60s
         conditions: ["[STATUS] < 400"]
       - name: prometheus
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "prometheus is down"
         group: platform
         url: http://kube-prometheus-stack-prometheus.monitoring:9090/-/healthy
         interval: 60s
@@ -58,6 +62,10 @@ data:
         interval: 60s
         conditions: ["[STATUS] < 400"]
       - name: health-postgres
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "health-postgres is down"
         group: platform
         url: tcp://health-pg-rw.health:5432
         interval: 120s
@@ -66,6 +74,10 @@ data:
       # management ports, hence insecure: true -- this checks reachability, not
       # certificate validity.
       - name: proxmox-lab01
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "proxmox-lab01 is down"
         group: infrastructure
         url: https://192.168.50.116:8006
         interval: 120s
@@ -73,13 +85,37 @@ data:
           insecure: true
         conditions: ["[STATUS] < 400"]
       - name: proxmox-lab02
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "proxmox-lab02 is down"
         group: infrastructure
         url: https://192.168.50.117:8006
         interval: 120s
         client:
           insecure: true
         conditions: ["[STATUS] < 400"]
+      # Substitute for the Homepage Tailscale widget (declined 26/07/2026). That
+      # widget needs an API access token which, per tailscale.com/kb/1101/api-keys,
+      # expires in at most 90 days and cannot be extended -- so the tile would go
+      # silently red every quarter. This checks the thing that actually matters
+      # (is the shared tailnet ingress node answering) with no credential and no
+      # expiry. 100.91.68.85 is the tessarack-ingress tailnet node that every
+      # *.tessarack.dev private route depends on, including this dashboard.
+      - name: tailnet-ingress
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "tailnet-ingress is down"
+        group: infrastructure
+        url: tcp://100.91.68.85:443
+        interval: 60s
+        conditions: ["[CONNECTED] == true"]
       - name: synology-dsm
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "synology-dsm is down"
         group: infrastructure
         url: https://192.168.50.127:5001
         interval: 120s
@@ -89,6 +125,10 @@ data:
       # Ingress-path checks: these traverse Traefik + the real cert, so a failure
       # here with the in-cluster check green means the ingress path broke.
       - name: homepage-via-ingress
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "homepage-via-ingress is down"
         group: ingress
         url: https://homepage.tessarack.dev
         interval: 120s
@@ -96,6 +136,10 @@ data:
           - "[STATUS] == 200"
           - "[CERTIFICATE_EXPIRATION] > 168h"
       - name: grafana-via-ingress
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "grafana-via-ingress is down"
         group: ingress
         url: https://health.tessarack.dev
         interval: 120s
@@ -103,16 +147,19 @@ data:
           - "[STATUS] < 400"
           - "[CERTIFICATE_EXPIRATION] > 168h"
 
-    # ALERTING -- deliberately left commented. Enabling it needs an ntfy topic,
-    # which is a secret and must go in a SOPS-sealed secret mounted as
-    # GATUS_NTFY_TOPIC, not inline here. Once that exists, uncomment this block
-    # and add `alerts:` to each endpoint you want paged on.
-    # alerting:
-    #   ntfy:
-    #     url: https://ntfy.sh
-    #     topic: ${GATUS_NTFY_TOPIC}
-    #     priority: 3
-    #     default-alert:
-    #       failure-threshold: 3
-    #       success-threshold: 2
-    #       send-on-resolved: true
+    # ALERTING -- ntfy, enabled 26/07/2026. Field names verified against the
+    # Gatus README (alerting.ntfy.{url,topic,priority,token,default-alert}).
+    # The topic comes from GATUS_NTFY_TOPIC, supplied by the SOPS-sealed
+    # gatus-secrets and substituted by Gatus's ${VAR} expansion at load, so it
+    # never appears in this ConfigMap. It is a NEW dedicated topic, not Corey's
+    # PAI/ntfy topic -- separate streams stay separately revocable, and no
+    # ~/.claude secret crosses into this repo.
+    alerting:
+      ntfy:
+        url: https://ntfy.sh
+        topic: ${GATUS_NTFY_TOPIC}
+        priority: 3
+        default-alert:
+          failure-threshold: 3
+          success-threshold: 2
+          send-on-resolved: true
