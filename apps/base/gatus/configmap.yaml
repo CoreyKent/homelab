@@ -147,6 +147,38 @@ data:
           - "[STATUS] < 400"
           - "[CERTIFICATE_EXPIRATION] > 168h"
 
+      # ================================================================
+      # TEMPORARY ALERT CANARY — DELETE ONCE THE PUSH ARRIVES
+      # ================================================================
+      # Added 26/07/2026 to prove the one link nothing else exercises: that
+      # Gatus itself resolves ${GATUS_NTFY_TOPIC} from its environment and
+      # actually publishes to ntfy. Everything upstream is already verified
+      # (provider loaded, secret mounted, topic reachable by direct curl), but
+      # no monitored endpoint has ever failed — so Gatus has never attempted a
+      # send. A fully green dashboard cannot prove an alert path works.
+      #
+      # 127.0.0.1:1 inside the Gatus pod is guaranteed closed: no listener, no
+      # egress, no external side effect. failure-threshold: 1 fires on the
+      # first check instead of the default 3, so the push lands in ~30s.
+      #
+      # EXPECTED: one ntfy push within ~a minute of the rollout. That push is
+      # the proof. Then delete this block, commit, push, and rollout restart.
+      # If NO push arrives, substitution is broken — inspect the container env,
+      # not this file.
+      - name: alert-canary-delete-me
+        group: infrastructure
+        url: "tcp://127.0.0.1:1"
+        interval: 30s
+        conditions:
+          - "[CONNECTED] == true"
+        alerts:
+          - type: ntfy
+            enabled: true
+            failure-threshold: 1
+            success-threshold: 1
+            send-on-resolved: true
+            description: "Gatus alert-path canary — if this reached your phone the full chain works. Now delete the endpoint."
+
     # ALERTING -- ntfy, enabled 26/07/2026. Field names verified against the
     # Gatus README (alerting.ntfy.{url,topic,priority,token,default-alert}).
     # The topic comes from GATUS_NTFY_TOPIC, supplied by the SOPS-sealed
