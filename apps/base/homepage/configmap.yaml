@@ -15,13 +15,30 @@ data:
     headerStyle: clean
     theme: dark
     color: slate
+    # Group names MUST be unique across services.yaml AND bookmarks.yaml.
+    # A bookmark group sharing a name with a service group renders nothing
+    # (2026-07-26: bookmarks group was named "Homelab", collided, showed zero).
     layout:
       Homelab:
+        style: row
+        columns: 4
+      Platform:
         style: row
         columns: 4
       Infrastructure:
         style: row
         columns: 4
+      # Populated only by IngressRoute annotations, never by services.yaml.
+      # Empty until the whoami canary proves auto-discovery works.
+      Discovered:
+        style: row
+        columns: 4
+      Radio:
+        style: column
+      Study:
+        style: column
+      Accounts:
+        style: column
   docker.yaml: ""
   services.yaml: |
     - Homelab:
@@ -42,8 +59,47 @@ data:
             icon: mdi-view-dashboard
         - Pulse:
             href: https://pulse.tessarack.dev
+            # DELIBERATELY has no siteMonitor/ping, unlike every other tile here.
+            # Measured 2026-07-26 from inside the homepage pod: pulse.tessarack.dev
+            # resolves to 100.127.112.71 -- a DIFFERENT tailnet node from the
+            # cluster's own ingress (100.91.68.85). The pod reaches the latter
+            # (health.tessarack.dev -> 302, 200) but gets 100% ICMP loss and an
+            # HTTPS timeout to the former. Cluster pods have no route onto the
+            # wider tailnet, so BOTH probe types would render a permanent error
+            # badge. Adding one back requires routing the cluster to that node
+            # (tailscale subnet router / operator egress), not a config change.
             description: Life OS dashboard
             icon: mdi-pulse
+        - Linkding:
+            href: https://linkding-lab.tessarack.com
+            siteMonitor: https://linkding-lab.tessarack.com
+            description: Bookmarks
+            icon: linkding.png
+    - Platform:
+        - Prometheus:
+            description: Metrics & alerting
+            icon: prometheus.png
+            # No href: Prometheus has no ingress. In-cluster ClusterIP, no auth.
+            widget:
+              type: prometheus
+              url: http://kube-prometheus-stack-prometheus.monitoring:9090
+        - Registry:
+            href: http://192.168.50.81:30500/v2/
+            siteMonitor: http://192.168.50.81:30500/v2/
+            description: Container registry (API only, no UI)
+            icon: mdi-package-variant-closed
+        - Finance Progress:
+            href: http://192.168.50.81:8080
+            siteMonitor: http://192.168.50.81:8080
+            description: Finance progress app
+            icon: mdi-finance
+        - Gatus:
+            href: https://status.tessarack.dev
+            description: Uptime monitoring
+            icon: gatus.png
+            widget:
+              type: gatus
+              url: http://gatus.gatus:8080
     - Infrastructure:
         - Proxmox lab01:
             href: https://192.168.50.116:8006
@@ -69,10 +125,39 @@ data:
             href: https://192.168.50.127:5001
             description: DSM / storage
             icon: synology.png
+            # UPGRADE PATH — needs a DSM user (read-only, 2FA disabled for that
+            # account) added to homepage-secrets as HOMEPAGE_VAR_SYNOLOGY_*.
+            # Uncomment once those two keys exist in the sealed secret.
+            # widget:
+            #   type: diskstation
+            #   url: https://192.168.50.127:5001
+            #   username: "{{HOMEPAGE_VAR_SYNOLOGY_USERNAME}}"
+            #   password: "{{HOMEPAGE_VAR_SYNOLOGY_PASSWORD}}"
         - ASUS Router:
             href: http://192.168.50.1
             description: RT-AX86S
             icon: mdi-router-wireless
+        - Tailscale:
+            href: https://login.tailscale.com/admin/machines
+            description: Tailnet admin
+            icon: tailscale.png
+            # UPGRADE PATH — needs a Tailscale API key (expires, default 90d) and
+            # the numeric device id, as HOMEPAGE_VAR_TAILSCALE_KEY / _DEVICE_ID.
+            # widget:
+            #   type: tailscale
+            #   deviceid: "{{HOMEPAGE_VAR_TAILSCALE_DEVICE_ID}}"
+            #   key: "{{HOMEPAGE_VAR_TAILSCALE_KEY}}"
+        - Cloudflare Tunnels:
+            href: https://one.dash.cloudflare.com
+            description: cloudflared (linkding + tessarack-ingress)
+            icon: cloudflare.png
+            # UPGRADE PATH — needs an account-scoped CF API token with
+            # Account.Cloudflare Tunnel:Read, plus accountid and tunnelid.
+            # widget:
+            #   type: cloudflared
+            #   accountid: "{{HOMEPAGE_VAR_CF_ACCOUNT_ID}}"
+            #   tunnelid: "{{HOMEPAGE_VAR_CF_TUNNEL_ID}}"
+            #   key: "{{HOMEPAGE_VAR_CF_API_TOKEN}}"
   widgets.yaml: |
     - kubernetes:
         cluster:
@@ -106,9 +191,47 @@ data:
           timeStyle: short
           dateStyle: long
   bookmarks.yaml: |
-    - Homelab:
-        - Homepage Docs:
-            - abbr: HP
-              href: https://gethomepage.dev
+    - Radio:
+        - QRZ:
+            - abbr: QRZ
+              href: https://www.qrz.com
+        - Solar / propagation:
+            - abbr: SOL
+              href: https://www.hamqsl.com/solar.html
+        - SOTA:
+            - abbr: SOTA
+              href: https://sotawatch.sota.org.uk
+        - POTA:
+            - abbr: POTA
+              href: https://pota.app
+        - ACMA register:
+            - abbr: ACMA
+              href: https://web.acma.gov.au/rrl/register_search.main_page
+    - Study:
+        - Kubernetes docs:
+            - abbr: K8S
+              href: https://kubernetes.io/docs/home/
+        - CKA curriculum:
+            - abbr: CKA
+              href: https://github.com/cncf/curriculum
+        - killer.sh:
+            - abbr: KIL
+              href: https://killer.sh
+        - RemNote:
+            - abbr: REM
+              href: https://www.remnote.com
+    - Accounts:
+        - IBKR:
+            - abbr: IB
+              href: https://www.interactivebrokers.com.au
+        - Garmin Connect:
+            - abbr: GC
+              href: https://connect.garmin.com
+        - Cloudflare:
+            - abbr: CF
+              href: https://dash.cloudflare.com
+        - homelab repo:
+            - abbr: GIT
+              href: https://github.com/CoreyKent/homelab
   custom.css: ""
   custom.js: ""
