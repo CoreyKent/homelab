@@ -1,0 +1,18 @@
+# storageClassName is set EXPLICITLY on purpose: this cluster currently has TWO
+# StorageClasses both flagged default (local-path and synology-iscsi), so an
+# unqualified PVC has undefined behaviour. synology-iscsi* chosen over local-path
+# so uptime history survives the loss of the node Gatus happens to land on --
+# which is exactly the event you want the history for. The -retain variant is
+# deliberate: the apps Kustomization runs prune: true, so reverting the Gatus
+# commit would otherwise delete this volume and every hour of history with it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gatus-data
+  namespace: gatus
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: synology-iscsi-retain
+  resources:
+    requests:
+      storage: 2Gi

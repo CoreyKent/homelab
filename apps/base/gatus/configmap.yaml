@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gatus
+  namespace: gatus
+  labels:
+    app.kubernetes.io/name: gatus
+data:
+  config.yaml: |
+    storage:
+      type: sqlite
+      path: /data/data.db
+    ui:
+      title: Tessarack Status
+      header: Tessarack
+    # Checks hit in-cluster Services by DNS rather than the public hostnames.
+    # Rationale: this isolates "the app is down" from "the ingress/DNS/cert path
+    # is down". The two ingress-path checks at the bottom cover the latter.
+    endpoints:
+      - name: homepage
+        group: apps
+        url: http://homepage.homepage:3000
+        interval: 60s
+        conditions: ["[STATUS] == 200"]
+      - name: grafana-health
+        group: apps
+        url: http://grafana.health:3000/api/health
+        interval: 60s
+        conditions: ["[STATUS] == 200"]
+      - name: mealie
+        group: apps
+        url: http://mealie.mealie:9000
+        interval: 60s
+        conditions: ["[STATUS] < 400"]
+      - name: itpm
+        group: apps
+        url: http://itpm-dashboard.itpm:8050
+        interval: 60s
+        conditions: ["[STATUS] < 400"]
+      - name: linkding
+        group: apps
+        url: http://linkding.linkding:9090
+        interval: 60s
+        conditions: ["[STATUS] < 400"]
+      - name: finance-progress
+        group: apps
+        url: http://finance-progress-app.finance-progress:8080
+        interval: 60s
+        conditions: ["[STATUS] < 400"]
+      - name: prometheus
+        group: platform
+        url: http://kube-prometheus-stack-prometheus.monitoring:9090/-/healthy
+        interval: 60s
+        conditions: ["[STATUS] == 200"]
+      - name: registry
+        group: platform
+        url: http://registry.registry:5000/v2/
+        interval: 60s
+        conditions: ["[STATUS] < 400"]
+      - name: health-postgres
+        group: platform
+        url: tcp://health-pg-rw.health:5432
+        interval: 120s
+        conditions: ["[CONNECTED] == true"]
+      # Hosts outside the cluster. Both serve self-signed/private certs on their
+      # management ports, hence insecure: true -- this checks reachability, not
+      # certificate validity.
+      - name: proxmox-lab01
+        group: infrastructure
+        url: https://192.168.50.116:8006
+        interval: 120s
+        client:
+          insecure: true
+        conditions: ["[STATUS] < 400"]
+      - name: proxmox-lab02
+        group: infrastructure
+        url: https://192.168.50.117:8006
+        interval: 120s
+        client:
+          insecure: true
+        conditions: ["[STATUS] < 400"]
+      - name: synology-dsm
+        group: infrastructure
+        url: https://192.168.50.127:5001
+        interval: 120s
+        client:
+          insecure: true
+        conditions: ["[STATUS] < 400"]
+      # Ingress-path checks: these traverse Traefik + the real cert, so a failure
+      # here with the in-cluster check green means the ingress path broke.
+      - name: homepage-via-ingress
+        group: ingress
+        url: https://homepage.tessarack.dev
+        interval: 120s
+        conditions:
+          - "[STATUS] == 200"
+          - "[CERTIFICATE_EXPIRATION] > 168h"
+      - name: grafana-via-ingress
+        group: ingress
+        url: https://health.tessarack.dev
+        interval: 120s
+        conditions:
+          - "[STATUS] < 400"
+          - "[CERTIFICATE_EXPIRATION] > 168h"
+
+    # ALERTING -- deliberately left commented. Enabling it needs an ntfy topic,
+    # which is a secret and must go in a SOPS-sealed secret mounted as
+    # GATUS_NTFY_TOPIC, not inline here. Once that exists, uncomment this block
+    # and add `alerts:` to each endpoint you want paged on.
+    # alerting:
+    #   ntfy:
+    #     url: https://ntfy.sh
+    #     topic: ${GATUS_NTFY_TOPIC}
+    #     priority: 3
+    #     default-alert:
+    #       failure-threshold: 3
+    #       success-threshold: 2
+    #       send-on-resolved: true
