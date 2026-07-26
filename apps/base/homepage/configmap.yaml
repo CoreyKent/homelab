@@ -146,8 +146,14 @@ data:
             href: https://login.tailscale.com/admin/machines
             description: Tailnet admin
             icon: tailscale.png
-            # UPGRADE PATH — needs a Tailscale API key (expires, default 90d) and
-            # the numeric device id, as HOMEPAGE_VAR_TAILSCALE_KEY / _DEVICE_ID.
+            # WIDGET DECLINED 26/07/2026 (Corey's call, my recommendation). The
+            # tailscale widget needs an API access token that expires in at most
+            # 90 days and cannot be extended or disabled
+            # (tailscale.com/kb/1101/api-keys) -- the tile would go red every
+            # quarter with no warning. Replaced by a Gatus endpoint,
+            # `tailnet-ingress` (tcp://100.91.68.85:443): no credential, no
+            # expiry, and it watches the node this whole dashboard depends on.
+            # This tile stays a plain link to the admin console.
             # widget:
             #   type: tailscale
             #   deviceid: "{{HOMEPAGE_VAR_TAILSCALE_DEVICE_ID}}"
@@ -156,11 +162,22 @@ data:
             href: https://one.dash.cloudflare.com
             description: cloudflared (linkding + tessarack-ingress)
             icon: cloudflare.png
-            # UPGRADE PATH — needs an account-scoped CF API token with
-            # Account.Cloudflare Tunnel:Read, plus accountid and tunnelid.
+            # APPROVED 26/07/2026 — uncomment once the two secret keys exist.
+            # accountid is hardcoded below because it is not a secret and I
+            # retrieved it from the zone object: f06bb074f10ab6c01d699da5a257cf4b
+            # ("Quilb1@gmail.com's Account"). Still needed from Corey:
+            #   HOMEPAGE_VAR_CF_TUNNEL_ID   -- Zero Trust > Networks > Tunnels,
+            #       pick tessarack-ingress. I could NOT retrieve this: the
+            #       cfd_tunnel API returned success with an empty list, which is
+            #       indistinguishable from a scope-filtered response, so I am not
+            #       claiming there are no tunnels -- just that I could not read it.
+            #   HOMEPAGE_VAR_CF_API_TOKEN   -- new custom token, single permission
+            #       Account > Cloudflare Tunnel > Read. Do NOT reuse the
+            #       Zone.DNS-edit token in ~/.env; a read-only tile must not hold
+            #       a DNS-write credential.
             # widget:
             #   type: cloudflared
-            #   accountid: "{{HOMEPAGE_VAR_CF_ACCOUNT_ID}}"
+            #   accountid: "f06bb074f10ab6c01d699da5a257cf4b"
             #   tunnelid: "{{HOMEPAGE_VAR_CF_TUNNEL_ID}}"
             #   key: "{{HOMEPAGE_VAR_CF_API_TOKEN}}"
   widgets.yaml: |
