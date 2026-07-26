@@ -18,19 +18,14 @@ spec:
     metadata:
       labels:
         app: whoami
-        # Required for Homepage's status badge on the discovered tile. MEASURED
-        # 26/07/2026 from the homepage pod's own log:
-        #   "no pods found with namespace=tessarack-ingress and
-        #    labelSelector=app.kubernetes.io/name=whoami-private"
-        # Homepage derives the app name from the IngressRoute's metadata.name and
-        # looks for pods labelled app.kubernetes.io/name=<that name>. These pods
-        # carried only `app: whoami`, so discovery succeeded (the tile appeared)
-        # but the status lookup found nothing and rendered NOT FOUND.
-        # GENERAL RULE for migrating any app to annotation-based discovery: the
-        # pod template must carry app.kubernetes.io/name equal to the
-        # IngressRoute's name, or the tile shows NOT FOUND.
-        # .spec.selector is deliberately left as `app: whoami` -- a Deployment's
-        # selector is immutable, and adding a template label does not touch it.
+        # Retained after the canary was retired, though nothing reads it now.
+        # It is the artifact of the lesson this canary actually taught, and the
+        # rule it proved is documented on grafana-deployment.yaml where it is
+        # load-bearing: Homepage derives an app's name from its IngressRoute's
+        # metadata.name and queries pods with
+        # labelSelector=app.kubernetes.io/name=<that name>. Discovery succeeds
+        # without it (the tile appears) but the badge renders NOT FOUND.
+        # Harmless to keep; delete with the rest if whoami itself ever goes.
         app.kubernetes.io/name: whoami-private
     spec:
       containers:
@@ -83,24 +78,17 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: whoami-private
-  # AUTO-DISCOVERY CANARY (2026-07-26). homepage's kubernetes.yaml already has
-  # `ingress: true` + `traefik: true`, and its ClusterRole already grants
-  # get/list on traefik.io/ingressroutes -- but no object had ever carried these
-  # annotations, so discovery was unproven. This is the single-object test.
-  # If a "Discovered" group appears on the dashboard with a Whoami tile, the
-  # mechanism works and the hand-listed services.yaml entries can migrate to
-  # per-app annotations (delete the manual entry in the SAME commit as adding
-  # the annotation, or the tile will appear twice).
-  annotations:
-    gethomepage.dev/enabled: "true"
-    gethomepage.dev/name: "Whoami"
-    gethomepage.dev/description: "Auto-discovery canary"
-    gethomepage.dev/group: "Discovered"
-    gethomepage.dev/icon: "mdi-test-tube"
-    # href pinned rather than inferred: Homepage parses Host() match rules
-    # unreliably, and an unresolvable href is indistinguishable from discovery
-    # having failed outright -- which would make this canary untrustworthy.
-    gethomepage.dev/href: "https://priv.tessarack.dev"
+  # AUTO-DISCOVERY CANARY RETIRED 26/07/2026 — it did its job. The annotations
+  # that lived here proved Homepage's IngressRoute discovery works end to end,
+  # and Grafana now reaches the dashboard through that same mechanism
+  # (apps/staging/health/grafana-ingressroute.yaml). Removing them also empties
+  # and retires the "Discovered" layout group in the homepage configmap.
+  #
+  # The whoami DEPLOYMENT AND BOTH ROUTES ARE DELIBERATELY KEPT. Their job was
+  # never the dashboard: pub.tessarack.dev and priv.tessarack.dev are the
+  # standing proof that the two distinct ingress paths (cloudflared -> :80
+  # plaintext, and direct tailnet -> :443 TLS) both still serve. That is worth
+  # 10m of CPU. Say so if you want the whole app gone instead.
 spec:
   entryPoints:
     - websecure
