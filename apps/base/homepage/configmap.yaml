@@ -125,9 +125,14 @@ data:
             href: https://192.168.50.127:5001
             description: DSM / storage
             icon: synology.png
-            # UPGRADE PATH — needs a DSM user (read-only, 2FA disabled for that
-            # account) added to homepage-secrets as HOMEPAGE_VAR_SYNOLOGY_*.
-            # Uncomment once those two keys exist in the sealed secret.
+            # UPGRADE PATH — CORRECTION 26/07/2026: this widget is NOT satisfiable
+            # with a read-only account. Per gethomepage.dev/widgets/services/diskstation,
+            # uptime/CPU/memory come from SYNO.Core.System, which requires the account
+            # to be in the DSM **Administrators** group, and the widget is incompatible
+            # with 2FA. Least-privilege shape is therefore: dedicated user, in
+            # Administrators, "No Access" to every shared folder, all applications
+            # denied except DSM. Weigh that exposure against a dashboard tile before
+            # enabling. Uncomment once HOMEPAGE_VAR_SYNOLOGY_* exist in the secret.
             # widget:
             #   type: diskstation
             #   url: https://192.168.50.127:5001
