@@ -181,21 +181,31 @@ data:
             # token also returns an EMPTY list from /accounts, i.e. it holds no
             # account-level scope whatsoever (it is zone-scoped Zone.DNS-edit).
             #
-            # STILL BLOCKED on one item only:
-            #   HOMEPAGE_VAR_CF_API_TOKEN -- new custom token, single permission
-            #       Account > Cloudflare Tunnel > Read. I cannot mint this:
-            #       GET /user/tokens returns HTTP 403, so the existing token
-            #       lacks User > API Tokens > Edit. It must be created in the
-            #       dashboard. Do NOT substitute the ~/.env Zone.DNS-edit token
-            #       -- this pod has no authentication of its own, so a DNS-write
-            #       credential inside it is a materially worse exposure than the
-            #       tile is worth.
-            # Uncomment the block below once that key exists in homepage-secrets.
-            # widget:
-            #   type: cloudflared
-            #   accountid: "f06bb074f10ab6c01d699da5a257cf4b"
-            #   tunnelid: "2ff4d280-2db6-49c0-8ecc-9f5d57adc56f"
-            #   key: "{{HOMEPAGE_VAR_CF_API_TOKEN}}"
+            # ENABLED 27/07/2026 — HOMEPAGE_VAR_CF_API_TOKEN now exists in
+            # homepage-secrets (SOPS-sealed; decrypt round-trip verified and the
+            # sealed value's hash matches the source).
+            #
+            # CREDENTIAL PROVENANCE — read this before rotating. The token used
+            # is CF_ACCESS_TOKEN from ~/.env, NOT CLOUDFLARE_API_TOKEN. They are
+            # different credentials: CLOUDFLARE_API_TOKEN is zone-scoped, returns
+            # an EMPTY /accounts list, and cannot see tunnels at all.
+            # CF_ACCESS_TOKEN is account-owned (token id
+            # 09901f4c7456adf5322bd331285969b4) and lists both tunnels healthy.
+            #
+            # KNOWN CAVEAT, accepted by Corey 27/07/2026: this token's read
+            # surface is WIDER than the single Account > Cloudflare Tunnel > Read
+            # permission the widget needs — it can also read zones, account
+            # members, and Access apps. Its WRITE capability was deliberately NOT
+            # probed (a write probe against live infrastructure is exactly how a
+            # stray Proxmox user got created earlier the same day), so write
+            # access is UNKNOWN rather than cleared. This pod has no
+            # authentication of its own. If that token turns out to carry any
+            # Edit permission, mint a tunnel-read-only token and re-seal this key.
+            widget:
+              type: cloudflared
+              accountid: "f06bb074f10ab6c01d699da5a257cf4b"
+              tunnelid: "2ff4d280-2db6-49c0-8ecc-9f5d57adc56f"
+              key: "{{HOMEPAGE_VAR_CF_API_TOKEN}}"
   widgets.yaml: |
     - kubernetes:
         cluster:
