@@ -28,11 +28,12 @@ data:
       Infrastructure:
         style: row
         columns: 4
-      # Populated only by IngressRoute annotations, never by services.yaml.
-      # Empty until the whoami canary proves auto-discovery works.
-      Discovered:
-        style: row
-        columns: 4
+      # "Discovered" group RETIRED 26/07/2026. It existed solely to hold the
+      # whoami auto-discovery canary, which has served its purpose: discovery
+      # is proven and Grafana now arrives through the same mechanism into
+      # "Homelab" above. Auto-discovered apps join whichever existing group
+      # their gethomepage.dev/group annotation names — they do not need a
+      # group of their own.
       Radio:
         style: column
       Study:
@@ -42,11 +43,16 @@ data:
   docker.yaml: ""
   services.yaml: |
     - Homelab:
-        - Grafana:
-            href: https://health.tessarack.dev
-            siteMonitor: https://health.tessarack.dev
-            description: Health metrics & dashboards
-            icon: grafana.png
+        # Grafana MIGRATED to auto-discovery 26/07/2026 — it is now defined by
+        # annotations on apps/staging/health/grafana-ingressroute.yaml and must
+        # NOT be listed here, or the tile renders twice.
+        #
+        # Only Grafana migrated. Mealie, ITPM and Finance Progress could not:
+        # their IngressRoutes (mealie-public, itpm-dashboard-tls,
+        # finance-progress-private) exist ONLY in cluster state — they are
+        # absent from this repo and carry no Flux ownership labels. Annotating
+        # them would mean hand-editing live objects that git does not track.
+        # Adopt them into the repo first; then they migrate the same way.
         - Mealie:
             href: https://mealie.tessarack.dev
             siteMonitor: https://mealie.tessarack.dev
@@ -162,23 +168,33 @@ data:
             href: https://one.dash.cloudflare.com
             description: cloudflared (linkding + tessarack-ingress)
             icon: cloudflare.png
-            # APPROVED 26/07/2026 — uncomment once the two secret keys exist.
-            # accountid is hardcoded below because it is not a secret and I
-            # retrieved it from the zone object: f06bb074f10ab6c01d699da5a257cf4b
-            # ("Quilb1@gmail.com's Account"). Still needed from Corey:
-            #   HOMEPAGE_VAR_CF_TUNNEL_ID   -- Zero Trust > Networks > Tunnels,
-            #       pick tessarack-ingress. I could NOT retrieve this: the
-            #       cfd_tunnel API returned success with an empty list, which is
-            #       indistinguishable from a scope-filtered response, so I am not
-            #       claiming there are no tunnels -- just that I could not read it.
-            #   HOMEPAGE_VAR_CF_API_TOKEN   -- new custom token, single permission
-            #       Account > Cloudflare Tunnel > Read. Do NOT reuse the
-            #       Zone.DNS-edit token in ~/.env; a read-only tile must not hold
-            #       a DNS-write credential.
+            # APPROVED 26/07/2026. accountid and tunnelid are both hardcoded
+            # below: neither is a secret (a tunnel ID is an identifier; the
+            # secret is the credentials.json the connector holds).
+            #
+            # tunnelid RESOLVED 26/07/2026 from the cluster, not the dashboard:
+            #   tessarack-ingress  2ff4d280-2db6-49c0-8ecc-9f5d57adc56f  <-- used
+            #   k3s-linkding       6dc72933-3d8f-45e8-8a9f-c704a58e3780
+            # Read out of the `tunnel-credentials` Secret's credentials.json in
+            # each namespace. This CORRECTS my earlier note: the cfd_tunnel API
+            # returning an empty list was scope-filtering, now proven — the same
+            # token also returns an EMPTY list from /accounts, i.e. it holds no
+            # account-level scope whatsoever (it is zone-scoped Zone.DNS-edit).
+            #
+            # STILL BLOCKED on one item only:
+            #   HOMEPAGE_VAR_CF_API_TOKEN -- new custom token, single permission
+            #       Account > Cloudflare Tunnel > Read. I cannot mint this:
+            #       GET /user/tokens returns HTTP 403, so the existing token
+            #       lacks User > API Tokens > Edit. It must be created in the
+            #       dashboard. Do NOT substitute the ~/.env Zone.DNS-edit token
+            #       -- this pod has no authentication of its own, so a DNS-write
+            #       credential inside it is a materially worse exposure than the
+            #       tile is worth.
+            # Uncomment the block below once that key exists in homepage-secrets.
             # widget:
             #   type: cloudflared
             #   accountid: "f06bb074f10ab6c01d699da5a257cf4b"
-            #   tunnelid: "{{HOMEPAGE_VAR_CF_TUNNEL_ID}}"
+            #   tunnelid: "2ff4d280-2db6-49c0-8ecc-9f5d57adc56f"
             #   key: "{{HOMEPAGE_VAR_CF_API_TOKEN}}"
   widgets.yaml: |
     - kubernetes:
