@@ -11,6 +11,18 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          # Added 2026-07-31. Without this the job had NEVER once succeeded:
+          # the image runs as uid=26(postgres) gid=102(postgres), but a freshly
+          # provisioned iSCSI volume mounts root:root 0755, so pg_dump failed with
+          #   could not open output file "/backups/health-<date>.dump": Permission denied
+          # and the retention pass then failed a second way on ext4's root-only
+          # lost+found:
+          #   find: '/backups/lost+found': Permission denied
+          # fsGroup makes the kubelet chown the volume (contents included, so
+          # lost+found too) to this GID on every mount, which fixes both and, unlike
+          # a manual chown, survives the PVC being recreated.
+          securityContext:
+            fsGroup: 102
           containers:
             - name: pgdump
               # Same image as the server guarantees matching client versions.
