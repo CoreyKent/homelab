@@ -5,6 +5,21 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  # storageClassName is set EXPLICITLY on purpose (2026-07-30).
+  #
+  # It used to be omitted, which silently inherited whatever the cluster default
+  # was at creation time (local-path). The API server persists that defaulted
+  # value into the object, so when the default moved local-path -> synology-iscsi
+  # this manifest became unreconcilable: Flux's desired spec (no class => the NEW
+  # default) stopped matching the bound PVC (the OLD class), and PVC spec is
+  # immutable. The whole apps Kustomization went Ready=False as a result.
+  #
+  # Never rely on the cluster default here.
+  storageClassName: synology-iscsi-retain
   resources:
     requests:
-      storage: 500Mi
+      # 1Gi, NOT 500Mi. The Synology CSI driver refuses anything smaller:
+      #   "Invalid input: required bytes is smaller than 1G"
+      # The live volume was migrated to 1Gi on 2026-07-30; contents verified by
+      # md5 manifest against the previous local-path volume before cutover.
+      storage: 1Gi
