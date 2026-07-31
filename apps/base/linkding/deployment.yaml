@@ -26,6 +26,30 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
 
+          # Added 2026-07-31. Without requests this pod was BestEffort QoS and
+          # would be the first thing the kubelet evicts under node memory
+          # pressure, regardless of importance.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+
+          # /health verified HTTP 200 from INSIDE the pod (127.0.0.1:9090) —
+          # not via the Service, which is not how the kubelet probes and can
+          # give a misleading result on apps that check the Host header.
+          readinessProbe:
+            httpGet: { path: /health, port: 9090 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: { path: /health, port: 9090 }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+
           volumeMounts:
             - name: linkding-data
               mountPath: /etc/linkding/data

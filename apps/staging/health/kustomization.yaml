@@ -18,6 +18,7 @@ resources:
   - withings-cronjob.yaml
   # Grafana admin secret — sealed by the orchestrator; referenced here, never authored by the builder.
   - grafana-admin.secret.yaml
+  - grafana-pvc.yaml
   - grafana-deployment.yaml
   - grafana-service.yaml
   - grafana-certificate.yaml

@@ -23,6 +23,12 @@ spec:
         # label DOES roll the pods once.
         app.kubernetes.io/name: grafana
     spec:
+      # grafana runs as 472:0; a freshly provisioned iSCSI volume mounts
+      # root:root 0755, so without fsGroup it cannot write its own database.
+      # This is the same fault that left pg-dump-nightly silently broken for
+      # 8 days (fixed in c43a413) — do not remove it when adding a volume.
+      securityContext:
+        fsGroup: 472
       containers:
         - name: grafana
           image: grafana/grafana:13.1.1
@@ -54,6 +60,17 @@ spec:
             httpGet:
               path: /api/health
               port: 3000
+          # Added 2026-07-31: readiness alone only removes a wedged pod from the
+          # Service; nothing ever restarts it. Generous thresholds so a slow
+          # datasource query cannot trigger a restart loop.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
           resources:
             requests:
               cpu: 100m
@@ -98,7 +115,8 @@ spec:
         # Stateless by decision: all state comes from Git; UI edits are structurally
         # forbidden (allowUiUpdates = false), so a PVC would only preserve state we forbid.
         - name: grafana-storage
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: grafana-data
         - name: grafana-dashboard-garmin
           configMap:
             name: grafana-dashboard-garmin

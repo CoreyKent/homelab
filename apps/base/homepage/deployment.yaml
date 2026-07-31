@@ -52,6 +52,16 @@ spec:
               port: http
             initialDelaySeconds: 15
             periodSeconds: 30
+          # Added 2026-07-31: liveness restarts a dead pod, but only readiness
+          # pulls a wedged one out of the Service endpoints. Same path, verified
+          # HTTP 200 from inside the pod (it returns 400 via the Service because
+          # homepage rejects unexpected Host headers — probe locally, always).
+          readinessProbe:
+            httpGet:
+              path: /api/healthcheck
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
           volumeMounts:
             - { name: config, mountPath: /app/config/kubernetes.yaml, subPath: kubernetes.yaml }
             - { name: config, mountPath: /app/config/settings.yaml,   subPath: settings.yaml }
