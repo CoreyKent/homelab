@@ -64,24 +64,6 @@ spec:
                 requests:
                   storage: 20Gi
 
-        # ---- Write-volume reduction -----------------------------------------
-        # Measured 31/07: 147,672 head series from just 24 targets, 4,812
-        # samples/sec. HALF of that is control-plane latency histograms:
-        #   apiserver_request_duration_seconds_bucket      20,736
-        #   etcd_request_duration_seconds_bucket           20,208
-        #   apiserver_request_sli_duration_seconds_bucket  17,336
-        #   apiserver_request_body_size_bytes_bucket        8,192
-        # These explode on verb x resource x scope x le. They earn their keep on
-        # a large cluster; on four nodes they are pure write amplification.
-        #
-        # Only the _bucket series are dropped — _sum and _count are KEPT, so
-        # average latency and request rates still work. What is lost is
-        # histogram_quantile() percentiles on the control plane specifically.
-        metricRelabelConfigs:
-          - sourceLabels: [__name__]
-            regex: '(apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_response_sizes_bucket|apiserver_watch_events_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|etcd_request_duration_seconds_bucket|workqueue_work_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|scheduler_plugin_execution_duration_seconds_bucket)'
-            action: drop
-
     alertmanager:
       alertmanagerSpec:
         # Currently holds 0 bytes; 1Gi is the Synology CSI floor regardless
@@ -99,3 +81,45 @@ spec:
                 requests:
                   storage: 1Gi
 
+    # ---- Cardinality reduction (corrected 2026-07-31) -----------------------
+    # SUPERSEDES the prometheusSpec.metricRelabelConfigs block in 8d84472,
+    # which silently did NOTHING: metric relabeling in prometheus-operator is
+    # per-ServiceMonitor, there is no global knob on the Prometheus CR. That
+    # config never reached a single scrape job - verified by grepping the
+    # generated /etc/prometheus/config_out/prometheus.env.yaml, where the only
+    # metric_relabel_configs present were the chart's own defaults.
+    #
+    # Measured 31/07 via sum by (job) (scrape_samples_scraped), total 158,285:
+    #   kubelet    82,407  52.1%
+    #   apiserver  61,733  39.0%   <- these two are 91% of all ingestion
+    #   everything else            <- not worth touching
+    #
+    # kubelet appears here because the kubelet is itself an API client, so it
+    # exposes the same apiserver_*/etcd_* client histograms. Same list, both.
+    #
+    # Only _bucket series are dropped. _sum and _count are KEPT, so request
+    # rates and average latency still work; what is lost is histogram_quantile()
+    # percentiles on the control plane. Expected: ~79,800 of 158,285 (~50%).
+    kubelet:
+      serviceMonitor:
+        # NOTE: this is the /metrics endpoint only. cAdvisorMetricRelabelings is
+        # a SEPARATE key and the chart already ships 6 rules there - deliberately
+        # not touched, setting it here would replace them.
+        metricRelabelings:
+          - sourceLabels: [__name__]
+            regex: '(apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_response_sizes_bucket|apiserver_watch_events_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|etcd_request_duration_seconds_bucket|workqueue_work_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|storage_operation_duration_seconds_bucket|kubelet_runtime_operations_duration_seconds_bucket)'
+            action: drop
+
+    kubeApiServer:
+      serviceMonitor:
+        metricRelabelings:
+          # This key REPLACES the chart default rather than appending, so the
+          # chart's own le-bucket drop is restated below to avoid clobbering it.
+          # (Redundant while the whole family is dropped, but kept so the
+          # behaviour survives if this drop list is ever narrowed.)
+          - sourceLabels: [__name__]
+            regex: '(apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_response_sizes_bucket|apiserver_watch_events_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|etcd_request_duration_seconds_bucket|workqueue_work_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|storage_operation_duration_seconds_bucket|kubelet_runtime_operations_duration_seconds_bucket)'
+            action: drop
+          - sourceLabels: [__name__, le]
+            regex: 'apiserver_request_duration_seconds_bucket;(0.15|0.2|0.3|0.35|0.4|0.45|0.6|0.7|0.8|0.9|1.25|1.5|1.75|2|3|3.5|4|4.5|6|7|8|9|15|25|40|50)'
+            action: drop
