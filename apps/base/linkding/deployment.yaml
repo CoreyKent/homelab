@@ -4,6 +4,17 @@ metadata:
   name: linkding
 spec:
   replicas: 1
+  # RWO volume + RollingUpdate is a deadlock, not a preference (2026-07-31).
+  # RollingUpdate starts the replacement pod BEFORE terminating the old one.
+  # If the scheduler places it on a different node it can never attach the
+  # ReadWriteOnce volume, and the rollout hangs forever:
+  #   Multi-Attach error for volume "pvc-..." Volume is already used by pod(s) ...
+  # Observed live: a linkding rollout sat in ContainerCreating for 48 minutes
+  # and only cleared when the old pod was deleted by hand. Recreate terminates
+  # first, so the volume detaches cleanly. Costs a few seconds of downtime on a
+  # single-replica app that has no HA anyway.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: linkding
