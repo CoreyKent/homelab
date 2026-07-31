@@ -32,3 +32,70 @@ spec:
     grafana:
       adminPassword: default
 
+    # ---- Persistence (added 2026-07-31) -------------------------------------
+    # Both Prometheus and Alertmanager were on emptyDir, so every reschedule
+    # silently discarded their data. Proven, not theoretical: retention was set
+    # to 10d while the TSDB actually held 18h, because the pod moved during the
+    # 30/07 rolling drain. emptyDir also put the TSDB on the NODE's root disk —
+    # k3s01 was at 74% and k3s04 at 73%, so moving to the NAS frees node disk
+    # as well as making the data durable.
+    #
+    # fsGroup 2000 is REQUIRED, not decorative: both pods run uid 1000/gid 2000
+    # and a freshly provisioned iSCSI volume mounts root:root 0755. Without it
+    # they cannot write — the identical fault that left pg-dump-nightly broken
+    # for 8 days (fixed in c43a413).
+    prometheus:
+      prometheusSpec:
+        # Measured 31/07: 756MB in 18h ≈ 1.0 GB/day, so 10d ≈ 10GB.
+        # 20Gi leaves room for compaction working space and cardinality growth.
+        retention: 10d
+        retentionSize: 15GB          # self-trim before the PVC can ever fill
+        scrapeInterval: 60s          # was 30s — halves sample rate, see below
+        securityContext:
+          fsGroup: 2000
+          runAsUser: 1000
+          runAsNonRoot: true
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: synology-iscsi-retain
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 20Gi
+
+        # ---- Write-volume reduction -----------------------------------------
+        # Measured 31/07: 147,672 head series from just 24 targets, 4,812
+        # samples/sec. HALF of that is control-plane latency histograms:
+        #   apiserver_request_duration_seconds_bucket      20,736
+        #   etcd_request_duration_seconds_bucket           20,208
+        #   apiserver_request_sli_duration_seconds_bucket  17,336
+        #   apiserver_request_body_size_bytes_bucket        8,192
+        # These explode on verb x resource x scope x le. They earn their keep on
+        # a large cluster; on four nodes they are pure write amplification.
+        #
+        # Only the _bucket series are dropped — _sum and _count are KEPT, so
+        # average latency and request rates still work. What is lost is
+        # histogram_quantile() percentiles on the control plane specifically.
+        metricRelabelConfigs:
+          - sourceLabels: [__name__]
+            regex: '(apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_response_sizes_bucket|apiserver_watch_events_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|etcd_request_duration_seconds_bucket|workqueue_work_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|scheduler_plugin_execution_duration_seconds_bucket)'
+            action: drop
+
+    alertmanager:
+      alertmanagerSpec:
+        # Currently holds 0 bytes; 1Gi is the Synology CSI floor regardless
+        # ("Invalid input: required bytes is smaller than 1G").
+        securityContext:
+          fsGroup: 2000
+          runAsUser: 1000
+          runAsNonRoot: true
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: synology-iscsi-retain
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 1Gi
+
