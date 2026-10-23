@@ -20,8 +20,10 @@ kind: CronJob
 metadata:
   name: gitea-backup-nightly
 spec:
-  # 16:45 UTC = 02:45 Australia/Sydney during AEST (03:45 AEDT); 15 min after health's pg_dump.
-  schedule: "45 16 * * *"
+  # Without timeZone a CronJob runs in the controller's LOCAL time (k3s01 is AEDT), so the
+  # old "45 16" fired at 16:45 Sydney, not overnight. Explicit zone, DST-correct.
+  timeZone: Australia/Sydney
+  schedule: "45 2 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
@@ -60,12 +62,14 @@ spec:
                 - |
                   set -eu
                   # Prune first so a full volume cannot deadlock the job forever: previously
-                  # retention only ran after a successful write, so ENOSPC was permanent. This
-                  # removes only files older than 14 days, so the 14 newer sets remain even if
-                  # tonight's run then fails. uid 26 can delete uid 1000 files because deletion
-                  # needs write on the directory, which fsGroup makes group-1000 writable.
-                  # -maxdepth 1 so find never descends into lost+found.
-                  find /backups -maxdepth 1 -name 'gitea-*' -mtime +14 -delete
+                  # retention only ran after a successful write, so ENOSPC was permanent.
+                  # RETENTION: 14 days exactly — anything older than 14 x 24 h (20160 min) is
+                  # deleted. -mmin, not -mtime: -mtime counts whole days and kept ~15-16.
+                  # Result: tonight's set plus the previous 14 nightly sets at most. uid 26 can
+                  # delete uid 1000 files because deletion needs write on the directory, which
+                  # fsGroup makes group-1000 writable. -maxdepth 1 so find never descends into
+                  # lost+found.
+                  find /backups -maxdepth 1 -name 'gitea-*' -mmin +20160 -delete
                   out="/backups/gitea-db-$(date +%F).dump"
                   pg_dump "host=gitea-pg-rw.gitea.svc user=gitea dbname=gitea sslmode=require" -Fc -f "$out"
                   test -s "$out"

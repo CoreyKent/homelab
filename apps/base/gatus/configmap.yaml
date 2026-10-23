@@ -57,6 +57,23 @@ data:
         url: http://gitea-http.gitea:3000/api/healthz
         interval: 60s
         conditions: ["[STATUS] == 200"]
+      # BACKUP FRESHNESS — Gatus can't see Jobs, so it asks Prometheus. The query counts the
+      # backup CronJobs whose last SUCCESS (kube-state-metrics) is under 26 h old:
+      #   count(time() - kube_cronjob_status_last_successful_time{cronjob=~"gitea-backup-nightly|pg-dump-nightly|itpm-backup"} < 93600)
+      # Healthy = 3. A failed or skipped nightly run drops it to 2 within ~2 h of the miss.
+      # Fails CLOSED: if kube-state-metrics or Prometheus is down the result is empty and the
+      # condition is INVALID -> alert. Adding a backup job means editing BOTH the regex and the 3.
+      - name: backups-fresh
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "a backup CronJob has not succeeded in 26h (gitea / health pg / itpm)"
+        group: platform
+        url: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/query?query=count(time()%20-%20kube_cronjob_status_last_successful_time%7Bcronjob%3D~%22gitea-backup-nightly%7Cpg-dump-nightly%7Citpm-backup%22%7D%20%3C%2093600)"
+        interval: 5m
+        conditions:
+          - "[STATUS] == 200"
+          - "[BODY].data.result[0].value[1] == 3"
       - name: prometheus
         alerts:
           - type: ntfy
