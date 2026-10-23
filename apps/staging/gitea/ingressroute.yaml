@@ -1,0 +1,18 @@
+# PRIVATE route: websecure + tls, reached only by tailnet clients via the
+# tessarack-ingress node (A record git.tessarack.dev -> 100.91.68.85).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gitea
+  namespace: gitea
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`git.tessarack.dev`)
+      kind: Rule
+      services:
+        - name: gitea-http
+          port: 3000
+  tls:
+    secretName: gitea-tessarack-dev-tls

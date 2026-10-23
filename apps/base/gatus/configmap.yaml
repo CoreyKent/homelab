@@ -47,6 +47,16 @@ data:
         url: http://finance-progress-app.finance-progress:8080
         interval: 60s
         conditions: ["[STATUS] < 400"]
+      - name: gitea
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "gitea is down"
+        group: apps
+        # /api/healthz checks the DB and cache as well as the web process.
+        url: http://gitea-http.gitea:3000/api/healthz
+        interval: 60s
+        conditions: ["[STATUS] == 200"]
       - name: prometheus
         alerts:
           - type: ntfy

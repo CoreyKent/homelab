@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: gitea
+resources:
+  - ../../base/gitea/
+  # SOPS-sealed. gitea-pg-credentials is the CNPG bootstrap owner secret (also read by Gitea and the
+  # backup job); gitea-admin seeds the first admin (forced password change at first login).
+  - gitea-pg-credentials.secret.yaml
+  - gitea-admin.secret.yaml
+  - cluster.yaml
+  - certificate.yaml
+  - ingressroute.yaml
+  - backup-pvc.yaml
+  - backup-cronjob.yaml

@@ -1,0 +1,135 @@
+# Gitea — private git server, tailnet-only.
+#
+#   Web:  https://git.tessarack.dev            (Traefik websecure via tessarack-ingress tailnet node)
+#   SSH:  git@gitea-ssh.tail226f8.ts.net:22    (its own Tailscale LoadBalancer node, below)
+#
+# Database is a DEDICATED CloudNativePG cluster (apps/staging/gitea/cluster.yaml), not the
+# chart's bundled Bitnami sub-charts — every sub-chart is disabled explicitly below, because
+# the chart's defaults switch on postgresql-ha AND a 3-node valkey-cluster.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: gitea
+  namespace: gitea
+spec:
+  interval: 30m
+  # The CNPG cluster is created in the same apply and takes a minute or two to come up;
+  # Gitea's init container retries the DB until then. Generous timeout + retries so the
+  # first install does not get marked failed while Postgres is still bootstrapping.
+  timeout: 10m
+  install:
+    remediation:
+      retries: 3
+  # No upgrade remediation on purpose: Gitea migrates the DB schema during an upgrade, so
+  # an automatic rollback to the old image would meet a newer schema and crash-loop.
+  # A failed upgrade stays failed and visible (flux get hr -n gitea) for a human to fix.
+  chart:
+    spec:
+      chart: gitea
+      version: "12.7.0" # Pinned. appVersion 1.27.0.
+      sourceRef:
+        kind: HelmRepository
+        name: gitea
+        namespace: gitea
+      interval: 12h
+  values:
+    replicaCount: 1
+    strategy:
+      # RWO iSCSI volume — a rolling update would deadlock on Multi-Attach.
+      type: Recreate
+
+    image:
+      tag: "1.27.0" # Pinned; rootless variant (chart default rootless: true).
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+
+    persistence:
+      enabled: true
+      # storageClass is always explicit; two StorageClasses are both marked default on this cluster.
+      storageClass: synology-iscsi-retain
+      size: 20Gi
+      # Chart default annotation helm.sh/resource-policy: keep is retained, so an uninstall
+      # never deletes the repo volume; the StorageClass is Retain as a second guard.
+
+    service:
+      http:
+        type: ClusterIP
+        port: 3000
+      ssh:
+        # Own tailnet node for git-over-SSH. Traefik's tailnet ingress is HTTPS-only.
+        type: LoadBalancer
+        loadBalancerClass: tailscale
+        clusterIP: "" # A LoadBalancer cannot be headless (chart default is None).
+        port: 22
+        annotations:
+          tailscale.com/hostname: gitea-ssh
+
+    # Every bundled dependency OFF — the database is the dedicated CNPG cluster.
+    postgresql-ha:
+      enabled: false
+    postgresql:
+      enabled: false
+    valkey-cluster:
+      enabled: false
+    valkey:
+      enabled: false
+
+    gitea:
+      admin:
+        # SOPS-sealed in apps/staging/gitea/gitea-admin.secret.yaml (keys: username, password).
+        existingSecret: gitea-admin
+        email: "corey@tessarack.dev" # Display only — the mailer is disabled.
+        # Seed once and force a change at first login; the secret then stops being the password.
+        passwordMode: initialOnlyRequireReset
+
+      config:
+        APP_NAME: "Tessarack Git"
+        server:
+          DOMAIN: git.tessarack.dev
+          ROOT_URL: https://git.tessarack.dev/
+          SSH_DOMAIN: gitea-ssh.tail226f8.ts.net
+          SSH_PORT: 22
+          SSH_LISTEN_PORT: 2222 # rootless image listens unprivileged; the Service maps 22 -> 2222
+        database:
+          DB_TYPE: postgres
+          HOST: gitea-pg-rw.gitea.svc:5432
+          NAME: gitea
+          USER: gitea
+          SSL_MODE: require # CNPG serves TLS by default
+          # PASSWD is injected from the CNPG bootstrap secret via additionalConfigFromEnvs below.
+        service:
+          DISABLE_REGISTRATION: true
+          REQUIRE_SIGNIN_VIEW: true
+          DEFAULT_KEEP_EMAIL_PRIVATE: true
+        repository:
+          DEFAULT_PRIVATE: private
+          DEFAULT_BRANCH: main
+        # Single user, single pod: no Valkey. Sessions in the DB so a pod restart
+        # does not log you out; cache in memory; queues on the data volume.
+        session:
+          PROVIDER: db
+        cache:
+          ADAPTER: memory
+        queue:
+          TYPE: level
+        mailer:
+          ENABLED: false
+        openid:
+          ENABLE_OPENID_SIGNIN: false
+          ENABLE_OPENID_SIGNUP: false
+        time:
+          DEFAULT_UI_LOCATION: Australia/Sydney
+        cron.update_checker:
+          ENABLED: false
+
+      additionalConfigFromEnvs:
+        - name: GITEA__DATABASE__PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: gitea-pg-credentials
+              key: password

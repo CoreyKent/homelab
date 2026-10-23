@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitea
+  annotations:
+    # Flux Kustomization "apps" has prune: true. If this directory is ever removed, Flux would
+    # delete the Namespace; namespace deletion cascades to every object in it, including the
+    # backup PVC (its own prune: disabled annotation does not survive a namespace delete) and
+    # the Helm-kept repo PVC. Retain keeps the PVs, but rebinding is manual, so delete this
+    # namespace by hand, deliberately.
+    kustomize.toolkit.fluxcd.io/prune: disabled

@@ -1,0 +1,107 @@
+# Nightly Gitea backup: database dump + data-volume archive, into the gitea-backups PVC.
+#
+# Why one pod, pinned to Gitea's node: the Gitea data volume is an RWO iSCSI LUN. RWO is
+# per-NODE, so a second pod can mount it only on the node Gitea is running on — a CronJob
+# scheduled anywhere else hangs on Multi-Attach. The required podAffinity below forces
+# co-location; the data volume is mounted read-only.
+#
+# Why fsGroup 1000: the kubelet does NOT apply fsGroup ownership changes to a volume
+# mounted readOnly (for read-only mounts, CSI supportsFSGroup returns false), so this pod
+# does not re-chown the live repo volume. fsGroup 1000 is for /backups: the kubelet
+# chowns that volume to group 1000 (setgid, group-writable), so both the postgres image
+# (uid 26, gains supplemental group 1000) and the gitea image (uid 1000) can write and
+# delete there. 1000 also matches Gitea's own group, so nothing changes if a future edit
+# drops readOnly.
+#
+# NOT OFF-BOX: gitea-backups is itself a LUN on the same DS923+. This protects against
+# deletion, corruption and a bad upgrade — not against losing the NAS. See RUNBOOK.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gitea-backup-nightly
+spec:
+  # 16:45 UTC = 02:45 Australia/Sydney during AEST (03:45 AEDT); 15 min after health's pg_dump.
+  schedule: "45 16 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      # Bounds a Job stuck Pending (e.g. Gitea pod absent so the required podAffinity cannot be met) or hung; without it, concurrencyPolicy: Forbid silently skips every later run.
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: gitea
+                      app.kubernetes.io/instance: gitea
+                  topologyKey: kubernetes.io/hostname
+          securityContext:
+            fsGroup: 1000
+            fsGroupChangePolicy: OnRootMismatch
+          initContainers:
+            - name: pgdump
+              # Same image as the server guarantees matching client versions.
+              image: ghcr.io/cloudnative-pg/postgresql:18.4
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: gitea-pg-credentials
+                      key: password
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  # Prune first so a full volume cannot deadlock the job forever: previously
+                  # retention only ran after a successful write, so ENOSPC was permanent. This
+                  # removes only files older than 14 days, so the 14 newer sets remain even if
+                  # tonight's run then fails. uid 26 can delete uid 1000 files because deletion
+                  # needs write on the directory, which fsGroup makes group-1000 writable.
+                  # -maxdepth 1 so find never descends into lost+found.
+                  find /backups -maxdepth 1 -name 'gitea-*' -mtime +14 -delete
+                  out="/backups/gitea-db-$(date +%F).dump"
+                  pg_dump "host=gitea-pg-rw.gitea.svc user=gitea dbname=gitea sslmode=require" -Fc -f "$out"
+                  test -s "$out"
+                  ls -l "$out"
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          containers:
+            - name: data-archive
+              # Gitea's own image: guaranteed to exist on this node and runs as uid 1000.
+              image: docker.gitea.com/gitea:1.27.0-rootless
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  out="/backups/gitea-data-$(date +%F).tar.gz"
+                  # Repos, LFS, attachments, avatars and conf/app.ini (holds SECRET_KEY and
+                  # INTERNAL_TOKEN — without it, 2FA secrets in the DB cannot be decrypted).
+                  # queues/ and indexers/ are transient or rebuildable; lost+found is ext4's.
+                  tar -czf "$out" -C /data \
+                    --exclude=./queues --exclude=./indexers --exclude=./lost+found .
+                  test -s "$out"
+                  ls -l "$out"
+                  ls -l /backups
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: gitea-shared-storage
+                readOnly: true
+            - name: backups
+              persistentVolumeClaim:
+                claimName: gitea-backups

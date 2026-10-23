@@ -1,0 +1,28 @@
+# Dedicated Postgres for Gitea — its own CNPG cluster, not a database inside health-pg,
+# so the two never share a failure, an upgrade, or a restore.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: gitea-pg
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4 # Pinned operand, same as health-pg.
+  # No superuser access: Gitea and the nightly pg_dump both connect as the database owner.
+  enableSuperuserAccess: false
+  storage:
+    # storageClass is always explicit; two StorageClasses are both marked default on this cluster.
+    storageClass: synology-iscsi-retain
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  bootstrap:
+    initdb:
+      database: gitea
+      owner: gitea
+      # basic-auth secret; username must equal the owner. Also read by Gitea and the backup job.
+      secret:
+        name: gitea-pg-credentials
