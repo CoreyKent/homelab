@@ -1,0 +1,22 @@
+# Tailscale-operator EGRESS Service: gives cluster pods (Gatus) a ClusterIP path to the
+# claude-pai VM over the tailnet. Pods have no route to 100.64.0.0/10 on their own — that
+# is why claude-pai's tailnet logout (25/10/2026, node-key expiry) went unnoticed for ~1.5
+# days: nothing inside the cluster could see it. The operator rewrites externalName to its
+# proxy Service and runs a proxy pod in the `tailscale` namespace.
+#
+# Only port 80 is exposed: Gatus asks Caddy on claude-pai for a Host-routed redirect (308),
+# which can only come from Caddy itself — see the claude-pai-tailnet endpoint in configmap.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-pai-tailnet
+  namespace: gatus
+  annotations:
+    tailscale.com/tailnet-fqdn: claude-pai.tail226f8.ts.net
+spec:
+  type: ExternalName
+  externalName: placeholder # rewritten by the Tailscale operator
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
