@@ -1,0 +1,33 @@
+# Read-only cluster access for terminal Carter (LifeOS on hermes-pai, VM 111).
+# Bound to the built-in `view` ClusterRole: get/list/watch on most resources,
+# no Secrets, no writes, no exec. Authored by Shade 02/11/2026; Corey reviews + pushes.
+# After Flux applies it, the token lives in Secret carter-readonly-token
+# (kube-system); Shade builds Carter's kubeconfig from it. Revoke: delete this
+# file (prune removes all three objects, which invalidates the token).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carter-readonly
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: carter-readonly-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: carter-readonly
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: carter-readonly-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: carter-readonly
+    namespace: kube-system

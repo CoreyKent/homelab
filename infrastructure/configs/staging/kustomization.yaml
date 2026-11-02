@@ -9,3 +9,4 @@ kind: Kustomization
 resources:
   - cloudflare-api-token.yaml
   - cluster-issuers.yaml
+  - carter-readonly.yaml
