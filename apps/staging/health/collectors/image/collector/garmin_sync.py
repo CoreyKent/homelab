@@ -653,7 +653,9 @@ class GarminStreams:
                 unit = str(activity.get("activityId", "unknown"))
                 activity_id = int(activity["activityId"])
                 start_ts = _parse_gmt(activity["startTimeGMT"])
-                local_date = logic.to_local_date(start_ts, self.cfg.tz_local)
+                local_date = logic.activity_local_date(
+                    activity.get("startTimeLocal"), start_ts, self.cfg.tz_local
+                )
 
                 activity_type_value = _guarded_get(activity, "activityType", "typeKey")
                 activity_type = "unknown" if activity_type_value is None else str(activity_type_value)

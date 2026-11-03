@@ -104,6 +104,15 @@ def _fetch_page(
             status=api_status,
         )
 
+    # Carry the response-level timezone onto groups that lack their own, so
+    # rows_from_groups can date a weigh-in where it happened (HealthData's client uses
+    # group timezone, then body timezone, the same order).
+    body_tz = body.get("timezone")
+    if isinstance(body_tz, str) and body_tz:
+        for grp in measure_groups:
+            if isinstance(grp, dict) and not grp.get("timezone"):
+                grp["timezone"] = body_tz
+
     raw_more = body.get("more", 0)
     if isinstance(raw_more, bool):
         more = raw_more
@@ -247,7 +256,9 @@ def rows_from_groups(groups: list[dict], tz_name: str) -> list[tuple]:
             )
             continue
 
-        local_date = logic.to_local_date(ts, tz_name)
+        # The group's own timezone is where the weigh-in happened; tz_name (home) is the
+        # fallback. Matches HealthData's withings_client local_day() since 31/10/2026.
+        local_date = logic.local_date_in(ts, group.get("timezone"), tz_name)
 
         measures = group.get("measures") or []
         if not isinstance(measures, list):

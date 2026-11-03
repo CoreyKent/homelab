@@ -19,7 +19,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: collector
-              image: 192.168.50.81:30500/health-collector:0.1.1@sha256:08839cb0e747df4f34f6d4fbb01dd17d0a05deb24fa1e05851a07c63d7350ba9
+              image: 192.168.50.81:30500/health-collector:0.1.2@sha256:77020864893dbbabbe3677308e80b929e727cfed1cf5edfb3c1ebfe58d1ddf1c
               args: ["garmin"]
               env:
                 - name: PGUSER

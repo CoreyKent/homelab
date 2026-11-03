@@ -94,6 +94,37 @@ def to_local_date(ts: datetime, tz_name: str) -> date:
     return ts.astimezone(ZoneInfo(tz_name)).date()
 
 
+def activity_local_date(start_time_local: object, start_ts: datetime, tz_name: str) -> date:
+    """Calendar date of a Garmin activity as the WATCH recorded it.
+
+    Garmin's `startTimeLocal` ("YYYY-MM-DD HH:MM:SS") is already in the timezone the
+    activity happened in. Converting `startTimeGMT` to a fixed home timezone instead puts
+    every activity recorded abroad on the wrong day (a Tucson 08:07 ride is 01:07 the next
+    day in Sydney). Falls back to the fixed-timezone conversion only when `startTimeLocal`
+    is missing or malformed.
+    """
+    if isinstance(start_time_local, str) and len(start_time_local) >= 10:
+        try:
+            return date.fromisoformat(start_time_local[:10])
+        except ValueError:
+            pass
+    return to_local_date(start_ts, tz_name)
+
+
+def local_date_in(ts: datetime, tz_candidate: object, default_tz: str) -> date:
+    """Local date of `ts` in `tz_candidate` (an IANA name from the vendor record), or in
+    `default_tz` when the candidate is absent or not a valid zone.
+    """
+    if ts.tzinfo is None or ts.utcoffset() is None:
+        raise ValueError("naive datetime is invalid for local-date conversion")
+    if isinstance(tz_candidate, str) and tz_candidate:
+        try:
+            return ts.astimezone(ZoneInfo(tz_candidate)).date()
+        except (ValueError, KeyError, OSError):
+            pass
+    return to_local_date(ts, default_tz)
+
+
 def date_range(start: date, end: date) -> list[date]:
     """Inclusive ascending list of dates."""
     if start > end:

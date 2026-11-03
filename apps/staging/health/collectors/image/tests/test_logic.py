@@ -193,6 +193,56 @@ class TestLocalDateConversion(unittest.TestCase):
         self.assertEqual(date(2026, 6, 15), logic.to_local_date(ts, "Australia/Sydney"))
 
 
+class TestActivityAndTravelLocalDates(unittest.TestCase):
+    """Activities and weigh-ins dated where they happened, not in the home timezone.
+
+    Regression (03/11/2026): 55 of 372 activities recorded in Arizona were stored a day
+    late because startTimeGMT was converted to Australia/Sydney.
+    """
+
+    # Real record shape: 29/08/2026 ranch ride, Tucson 08:04 local = 15:04 UTC = 01:04 Sydney 30/08.
+    TUCSON_TS = datetime(2026, 8, 29, 15, 4, 45, tzinfo=timezone.utc)
+
+    def test_activity_date_uses_start_time_local_abroad(self) -> None:
+        self.assertEqual(
+            date(2026, 8, 29),
+            logic.activity_local_date("2026-08-29 08:04:45", self.TUCSON_TS, "Australia/Sydney"),
+        )
+
+    def test_activity_date_at_home_is_unchanged(self) -> None:
+        ts = datetime(2026, 11, 3, 8, 56, 26, tzinfo=timezone.utc)  # 19:56 AEDT
+        self.assertEqual(
+            date(2026, 11, 3),
+            logic.activity_local_date("2026-11-03 19:56:26", ts, "Australia/Sydney"),
+        )
+
+    def test_activity_date_falls_back_when_start_time_local_missing_or_bad(self) -> None:
+        for bad in (None, "", "garbage-not-a-date", 12345):
+            with self.subTest(start_time_local=bad):
+                self.assertEqual(
+                    date(2026, 8, 30),
+                    logic.activity_local_date(bad, self.TUCSON_TS, "Australia/Sydney"),
+                )
+
+    def test_weigh_in_uses_group_timezone(self) -> None:
+        self.assertEqual(
+            date(2026, 8, 29),
+            logic.local_date_in(self.TUCSON_TS, "America/Phoenix", "Australia/Sydney"),
+        )
+
+    def test_weigh_in_falls_back_to_home_timezone(self) -> None:
+        for tz in (None, "", "Not/AZone"):
+            with self.subTest(tz=tz):
+                self.assertEqual(
+                    date(2026, 8, 30),
+                    logic.local_date_in(self.TUCSON_TS, tz, "Australia/Sydney"),
+                )
+
+    def test_weigh_in_rejects_naive_datetime(self) -> None:
+        with self.assertRaises(ValueError):
+            logic.local_date_in(datetime(2026, 8, 29, 15, 4), "America/Phoenix", "Australia/Sydney")
+
+
 class TestBackfillRangeLogic(unittest.TestCase):
     """Date spans and chunking for backfills."""
 

@@ -381,3 +381,26 @@ data:
         GRANT SELECT ON TABLES TO qs_reader;
 
     COMMIT;
+  0003_activity_local_date.sql: |
+    -- Migration 0003: date Garmin activities where they happened.
+    -- Until collector 0.1.2 the collector set garmin.activity.local_date by converting
+    -- startTimeGMT to Australia/Sydney, which put every activity recorded abroad a day
+    -- late (55 of 372 rows on 03/11/2026, all on US trips). Garmin's startTimeLocal is
+    -- already in the activity's own timezone; collector 0.1.2 uses it for new rows, and
+    -- this repairs the existing ones from the raw payload each row already stores.
+    -- Idempotent: touches only rows whose local_date differs; a rerun changes 0 rows.
+    -- A malformed startTimeLocal (not YYYY-MM-DD...) is skipped, not guessed.
+    BEGIN;
+    DO $$
+    DECLARE
+      n integer;
+    BEGIN
+      UPDATE garmin.activity
+         SET local_date = substring(raw->>'startTimeLocal' FROM 1 FOR 10)::date
+       WHERE raw->>'startTimeLocal' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+         AND local_date IS DISTINCT FROM substring(raw->>'startTimeLocal' FROM 1 FOR 10)::date;
+      GET DIAGNOSTICS n = ROW_COUNT;
+      RAISE NOTICE 'garmin.activity local_date repaired: % rows', n;
+    END
+    $$;
+    COMMIT;
