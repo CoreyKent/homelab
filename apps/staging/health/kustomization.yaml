@@ -12,7 +12,9 @@ resources:
   - cluster.yaml
   - migrations.yaml
   - migrate-job.yaml
+  - migrate-job-0002.yaml
   - backup-pvc.yaml
+  - pg-tailnet-service.yaml
   - pgdump-cronjob.yaml
   - garmin-cronjob.yaml
   - withings-cronjob.yaml

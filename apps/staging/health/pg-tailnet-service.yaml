@@ -1,0 +1,21 @@
+# health-pg on the tailnet, so claude-pai can write MacroFactor nutrition (migration 0002).
+# Selects the PRIMARY (same selector as the CNPG-managed health-pg-rw Service): with
+# instances: 1 the -ro Service has zero endpoints, so a replica-backed path would never connect.
+# Postgres auth still applies (qs_writer / qs_reader passwords); the tailnet ACL decides who can reach it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-pg-tailnet
+  namespace: health
+  annotations:
+    tailscale.com/hostname: health-pg
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    cnpg.io/cluster: health-pg
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
