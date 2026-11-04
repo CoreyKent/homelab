@@ -1,0 +1,25 @@
+# rockmonkey is created by bootstrap.initdb (owner rm_writer). It is declared here too so CNPG
+# manages it explicitly. tessarack is created EMPTY: HedgeFund stays on SQLite until Corey decides.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: markets-rockmonkey
+spec:
+  cluster:
+    name: markets-pg
+  name: rockmonkey
+  owner: rm_writer
+  ensure: present
+  databaseReclaimPolicy: retain
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: markets-tessarack
+spec:
+  cluster:
+    name: markets-pg
+  name: tessarack
+  owner: tq_writer
+  ensure: present
+  databaseReclaimPolicy: retain

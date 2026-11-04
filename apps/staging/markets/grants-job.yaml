@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: markets-grants-0001
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  # Completed Job kept for audit; ttlSecondsAfterFinished is deliberately unset.
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: grants
+          # Same image as the server guarantees matching client versions.
+          image: ghcr.io/cloudnative-pg/postgresql:18.4
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: markets-pg-superuser
+                  key: password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              H="host=markets-pg-rw.markets.svc user=postgres"
+              until pg_isready -h markets-pg-rw.markets.svc -U postgres; do sleep 2; done
+              # Wait for CNPG to reconcile all five managed roles and both Database CRs, so the
+              # GRANTs never race them into a permanently Failed (immutable) Job.
+              until psql "$H dbname=postgres" -tAc "SELECT count(*) FROM pg_roles WHERE rolname IN ('rm_writer','rm_reader','tq_writer','tq_reader','carter')" | grep -qx 5; do sleep 2; done
+              until psql "$H dbname=postgres" -tAc "SELECT count(*) FROM pg_database WHERE datname IN ('rockmonkey','tessarack')" | grep -qx 2; do sleep 2; done
+              psql "$H dbname=rockmonkey" -v ON_ERROR_STOP=1 -v db=rockmonkey -v w=rm_writer -v r=rm_reader -f /sql/0001_grants.sql
+              psql "$H dbname=tessarack"  -v ON_ERROR_STOP=1 -v db=tessarack  -v w=tq_writer -v r=tq_reader -f /sql/0001_grants.sql
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+      volumes:
+        - name: sql
+          configMap:
+            name: markets-grants

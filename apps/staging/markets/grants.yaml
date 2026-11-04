@@ -1,0 +1,19 @@
+# Applied by Job markets-grants-0001. Idempotent: safe to re-run. Future changes are new keys + new Jobs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: markets-grants
+data:
+  0001_grants.sql: |
+    -- Run once per database (psql -v db=… -v w=… -v r=…). The writer owns everything it creates;
+    -- the reader can read everything the writer creates, including future tables, and nothing else.
+    REVOKE ALL ON DATABASE :"db" FROM PUBLIC;
+    GRANT CONNECT, TEMPORARY ON DATABASE :"db" TO :"w";
+    GRANT CONNECT ON DATABASE :"db" TO :"r";
+    REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+    GRANT USAGE, CREATE ON SCHEMA public TO :"w";
+    GRANT USAGE ON SCHEMA public TO :"r";
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO :"r";
+    GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO :"r";
+    ALTER DEFAULT PRIVILEGES FOR ROLE :"w" IN SCHEMA public GRANT SELECT ON TABLES TO :"r";
+    ALTER DEFAULT PRIVILEGES FOR ROLE :"w" IN SCHEMA public GRANT SELECT ON SEQUENCES TO :"r";

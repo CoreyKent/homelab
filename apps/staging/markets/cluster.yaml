@@ -1,0 +1,56 @@
+# markets-pg: finance/market databases (RockMonkey, and HedgeFund/Tessarack later).
+# Deliberately a SEPARATE CNPG cluster from health-pg: its own process, volume, roles, restarts
+# and dumps, so a market migration or runaway query cannot touch health data. Plan:
+# claude-pai PAI/MEMORY/WORK/20261104-markets-pg-plan/PLAN.md (approved by Corey 04/11/2026).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: markets-pg
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4 # Pinned operand, same as health-pg.
+  # Superuser for the grants Job and the nightly pg_dump only.
+  enableSuperuserAccess: true
+  storage:
+    # Always explicit: two StorageClasses are both marked default on this cluster.
+    storageClass: synology-iscsi-retain
+    size: 20Gi
+  bootstrap:
+    initdb:
+      database: rockmonkey
+      owner: rm_writer
+  managed:
+    roles:
+      # One writer + one reader per database. A writer owns its database's objects.
+      - name: rm_writer
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pg-rm-writer
+      - name: rm_reader
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pg-rm-reader
+      - name: tq_writer
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pg-tq-writer
+      - name: tq_reader
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pg-tq-reader
+      # Carter (hermes-pai) gets its OWN login so its access is attributable and revocable
+      # separately. Read-only for now by membership: carter inherits rm_reader + tq_reader.
+      # The intended end state is parity with claude-pai; that is one reviewed change here
+      # (inRoles: rm_writer, tq_writer), never a password share.
+      - name: carter
+        ensure: present
+        login: true
+        inRoles:
+          - rm_reader
+          - tq_reader
+        passwordSecret:
+          name: pg-carter

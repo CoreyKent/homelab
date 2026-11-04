@@ -1,0 +1,20 @@
+# markets-pg on the tailnet, so claude-pai (RockMonkey) and hermes-pai (Carter) can reach it.
+# Selects the PRIMARY, like health-pg-tailnet: with instances: 1 the -ro Service has no endpoints.
+# The tailnet policy is currently allow-all, so Postgres auth (per-role passwords) is the control.
+apiVersion: v1
+kind: Service
+metadata:
+  name: markets-pg-tailnet
+  namespace: markets
+  annotations:
+    tailscale.com/hostname: markets-pg
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    cnpg.io/cluster: markets-pg
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

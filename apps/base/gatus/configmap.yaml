@@ -67,13 +67,14 @@ data:
         alerts:
           - type: ntfy
             enabled: true
-            description: "a backup CronJob has not succeeded in 26h (gitea / health pg / itpm)"
+            description: "a backup CronJob has not succeeded in 26h (gitea / health pg / markets pg / itpm)"
         group: platform
         url: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/query?query=count(time()%20-%20kube_cronjob_status_last_successful_time%7Bcronjob%3D~%22gitea-backup-nightly%7Cpg-dump-nightly%7Citpm-backup%22%7D%20%3C%2093600)"
         interval: 5m
         conditions:
           - "[STATUS] == 200"
-          - "[BODY].data.result[0].value[1] == 3"
+          # 4 = gitea-backup-nightly + pg-dump-nightly in BOTH health and markets (same name, two namespaces) + itpm-backup.
+          - "[BODY].data.result[0].value[1] == 4"
       # CLAUDE-PAI ON THE TAILNET — the VM serving pulse/rockmonkey and pushing to Gitea. Reached
       # through the claude-pai-tailnet egress Service (claude-pai-tailnet.yaml). Caddy answers
       # plain-HTTP with a 308 to https for a known Host, so 308 proves the tailnet path AND Caddy.
@@ -110,6 +111,15 @@ data:
         url: http://registry.registry:5000/v2/
         interval: 60s
         conditions: ["[STATUS] < 400"]
+      - name: markets-postgres
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "markets-postgres is down (RockMonkey / Tessarack)"
+        group: platform
+        url: tcp://markets-pg-rw.markets:5432
+        interval: 120s
+        conditions: ["[CONNECTED] == true"]
       - name: health-postgres
         alerts:
           - type: ntfy

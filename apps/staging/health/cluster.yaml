@@ -27,3 +27,13 @@ spec:
         login: true
         passwordSecret:
           name: pg-qs-reader
+      # Carter (hermes-pai), added 04/11/2026: its own login, read-only by membership of qs_reader
+      # (so it sees exactly what qs_reader sees, now and as grants evolve). Parity with claude-pai,
+      # the intended end state, is one reviewed change here (inRoles: qs_writer).
+      - name: carter
+        ensure: present
+        login: true
+        inRoles:
+          - qs_reader
+        passwordSecret:
+          name: pg-carter

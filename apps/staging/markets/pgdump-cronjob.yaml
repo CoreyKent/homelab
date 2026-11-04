@@ -1,0 +1,47 @@
+# Nightly dumps to a PVC. This PVC is on the NAS, like the database itself, so it protects
+# against database-level loss only. The OFF-NAS copy is pulled by claude-pai to tessarack-lab01
+# (PAI/TOOLS/BackupPgDump.ts) — see the plan. Both are needed.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-dump-nightly
+spec:
+  # Explicit zone: without it k3s CronJobs run in the controller's LOCAL time (AEDT).
+  # 03:15, after health (02:30) and gitea (02:45).
+  timeZone: Australia/Sydney
+  schedule: "15 3 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          # The image runs as uid 26 / gid 102; a fresh iSCSI volume mounts root:root. Without
+          # fsGroup pg_dump cannot write (the health job never succeeded for 8 days, 31/07/2026).
+          securityContext:
+            fsGroup: 102
+          containers:
+            - name: pgdump
+              image: ghcr.io/cloudnative-pg/postgresql:18.4
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: markets-pg-superuser
+                      key: password
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  for db in rockmonkey tessarack; do
+                    pg_dump "host=markets-pg-rw.markets.svc user=postgres dbname=$db" -Fc -f "/backups/$db-$(date +%F).dump"
+                  done
+                  find /backups -name '*.dump' -mtime +30 -delete
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: pg-backups

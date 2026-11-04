@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: markets
+resources:
+  - ../../base/markets/
+  # Co-located so the Cluster's managed roles get their SOPS-encrypted credentials in one apply.
+  - pg-rm-writer.secret.yaml
+  - pg-rm-reader.secret.yaml
+  - pg-tq-writer.secret.yaml
+  - pg-tq-reader.secret.yaml
+  - pg-carter.secret.yaml
+  - cluster.yaml
+  - databases.yaml
+  - grants.yaml
+  - grants-job.yaml
+  - backup-pvc.yaml
+  - pg-tailnet-service.yaml
+  - pgdump-cronjob.yaml

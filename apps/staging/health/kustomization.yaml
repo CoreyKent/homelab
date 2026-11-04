@@ -6,6 +6,7 @@ resources:
   # Co-located so the Cluster's managed roles get their SOPS-encrypted credentials in one apply.
   - pg-qs-writer.secret.yaml
   - pg-qs-reader.secret.yaml
+  - pg-carter.secret.yaml
   - withings-app.secret.yaml
   # Garmin tokenstore seed — sealed from Corey MFA bootstrap 23/07/2026; DB becomes authoritative after first run.
   - garmin-tokenstore.secret.yaml
