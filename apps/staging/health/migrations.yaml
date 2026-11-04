@@ -404,3 +404,13 @@ data:
     END
     $$;
     COMMIT;
+  0004_reader_sequences.sql: |
+    -- Migration 0004 (04/11/2026): let qs_reader (and so carter, by membership) read SEQUENCES.
+    -- pg_dump as a read-only role needs SELECT on every sequence it dumps; without it the off-NAS
+    -- dump (claude-pai BackupPgDump.ts) failed on nutrition.daily_id_seq. Reading a sequence only
+    -- exposes its counter. The token tables stay unreadable (no grant here touches them).
+    BEGIN;
+    GRANT SELECT ON ALL SEQUENCES IN SCHEMA garmin, withings, nutrition TO qs_reader;
+    GRANT SELECT ON SEQUENCE ops.run_log_run_id_seq TO qs_reader;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA garmin, withings, nutrition GRANT SELECT ON SEQUENCES TO qs_reader;
+    COMMIT;
