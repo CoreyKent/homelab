@@ -181,6 +181,18 @@ data:
         client:
           insecure: true
         conditions: ["[STATUS] < 400"]
+      # Home Assistant (VM 900, HAOS) -- the thing running the house had no check.
+      # Its front page answers 200 unauthenticated, so this needs no token. Plain
+      # HTTP on the LAN; probed 200 from inside the gatus namespace 15/11/2026.
+      - name: home-assistant
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "home-assistant is down"
+        group: infrastructure
+        url: http://192.168.50.184:8123/
+        interval: 120s
+        conditions: ["[STATUS] == 200"]
       # Ingress-path checks: these traverse Traefik + the real cert, so a failure
       # here with the in-cluster check green means the ingress path broke.
       - name: homepage-via-ingress
