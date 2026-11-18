@@ -8,8 +8,13 @@ spec:
   chart:
     spec:
       chart: tailscale-operator
-      # Newest version in the Tailscale Helm index as of 2026-07-22.
-      version: "1.98.9"
+      # 1.98.9 -> 1.104.7 on 18/11/2026: newest in the Tailscale Helm index (created 2026-11-12) and
+      # the first release whose k8s-operator AND tailscale images are both published. Proxies follow
+      # the operator's version. Checked against 1.98.9: Deployment selector still `app: operator`
+      # (immutable, unchanged under default nameOverride/fullnameOverride); oauth Secret still
+      # `operator-oauth`; CRDs moved into templates/tailscale.com_*.yaml with the same names plus
+      # new peerrelays.tailscale.com, which `upgrade.crds: CreateReplace` below creates.
+      version: "1.104.7"
       sourceRef:
         kind: HelmRepository
         name: tailscale
