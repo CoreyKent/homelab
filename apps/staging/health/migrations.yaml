@@ -414,3 +414,97 @@ data:
     GRANT SELECT ON SEQUENCE ops.run_log_run_id_seq TO qs_reader;
     ALTER DEFAULT PRIVILEGES IN SCHEMA garmin, withings, nutrition GRANT SELECT ON SEQUENCES TO qs_reader;
     COMMIT;
+  0005_supplement_schedule.sql: |
+    -- 0005: declared sleep-powder schedule (19/11/2026).
+    --
+    -- Switch Sleep+ and Wulf Sleep share magnesium as their only usable signature,
+    -- and Switch's folate signature is reachable by food plus Thorne alone, so the
+    -- export cannot say WHICH powder was taken. supplement_schedule records it, as
+    -- declared by Corey, and supplement_days_v counts a scheduled product only on
+    -- its scheduled dates. Products with no schedule rows are unaffected.
+    --
+    -- Like 0002, the config rows are seeded by the importer from db_utils.py, never
+    -- by this public migration. Idempotent: CREATE IF NOT EXISTS / CREATE OR REPLACE
+    -- (the view's output columns are unchanged, so OR REPLACE is legal).
+
+    BEGIN;
+
+    CREATE TABLE IF NOT EXISTS nutrition.supplement_schedule (
+        product text NOT NULL,
+        from_date date NOT NULL,
+        to_date date,
+        note text,
+        PRIMARY KEY (product, from_date),
+        CHECK (to_date IS NULL OR to_date >= from_date)
+    );
+
+    CREATE OR REPLACE VIEW nutrition.supplement_days_v AS
+    WITH det AS (
+        SELECT
+            n.date,
+            p.product,
+            p.display_name,
+            p.max_units,
+            p.track_from,
+            CASE
+                WHEN n.date < p.track_from THEN 0
+                -- 0005: a product with schedule rows counts only on its scheduled
+                -- dates (to_date NULL = open-ended). See supplement_schedule.
+                WHEN EXISTS (
+                         SELECT 1 FROM nutrition.supplement_schedule AS s
+                         WHERE s.product = p.product)
+                 AND NOT EXISTS (
+                         SELECT 1 FROM nutrition.supplement_schedule AS s
+                         WHERE s.product = p.product
+                           AND n.date >= s.from_date
+                           AND (s.to_date IS NULL OR n.date <= s.to_date)) THEN 0
+                -- LEAST() is safe here: every argument is non-NULL via NOT NULL
+                -- config, COALESCE() on the observed totals, and write-time checks
+                -- that forbid zero divisors.
+                ELSE LEAST(
+                    p.max_units,
+                    trunc(COALESCE(m1.value, 0) / p.sig_per_unit_1 + 1 - p.sig_frac)::int,
+                    trunc(COALESCE(m2.value, 0) / p.sig_per_unit_2 + 1 - p.sig_frac)::int
+                )
+            END AS units
+        FROM nutrition.daily AS n
+        CROSS JOIN nutrition.supplement_products AS p
+        LEFT JOIN nutrition.micros AS m1
+            ON m1.date = n.date
+           AND m1.source = n.source
+           AND m1.metric = p.sig_metric_1
+        LEFT JOIN nutrition.micros AS m2
+            ON m2.date = n.date
+           AND m2.source = n.source
+           AND m2.metric = p.sig_metric_2
+    ),
+    first_hit AS (
+        SELECT
+            det.product,
+            MIN(det.date) AS first_detected
+        FROM det
+        WHERE det.units >= 1
+        GROUP BY det.product
+    )
+    SELECT
+        det.date,
+        det.product,
+        det.display_name,
+        det.units,
+        det.max_units,
+        CASE WHEN det.units = det.max_units THEN 1 ELSE 0 END AS full_dose,
+        first_hit.first_detected,
+        CASE
+            WHEN det.units >= 1 THEN 'taken'
+            WHEN first_hit.first_detected IS NULL
+                 OR det.date < first_hit.first_detected THEN 'pre_tracking'
+            ELSE 'not_taken'
+        END AS status
+    FROM det
+    LEFT JOIN first_hit
+        ON first_hit.product = det.product;
+
+    GRANT SELECT, INSERT, UPDATE, DELETE ON nutrition.supplement_schedule TO qs_writer;
+    GRANT SELECT ON nutrition.supplement_schedule TO qs_reader;
+
+    COMMIT;
