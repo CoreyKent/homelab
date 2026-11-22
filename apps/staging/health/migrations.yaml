@@ -765,3 +765,100 @@ data:
     GRANT SELECT, INSERT, UPDATE, DELETE ON nutrition.expenditure TO qs_writer;
     -- Carter reads by membership of qs_reader (cluster.yaml), so this covers it too.
     GRANT SELECT ON nutrition.expenditure TO qs_reader;
+  0008_goals_contract.sql: |
+    -- 0008: goals contract (22/11/2026). Removes the two legacy ops.goal rows that 0006 left in place and makes
+    -- goal_id the identity.
+    --
+    -- 0006 was expand-only: the old rows (metric 'weight_kg', the retired ranch weight goal, and 'height_m') kept
+    -- goal_id NULL while the Overview/Withings/BMI panels still read them. Since 689fd5f no dashboard does: the
+    -- weight panels read the weight_hold band and BMI reads ops.setting, so the rows are dead and misleading.
+    --
+    -- goal_id becomes the PRIMARY KEY (it was a unique index beside a metric PK); metric stays NOT NULL and UNIQUE
+    -- so existing upserts on (metric) keep working. goal_kind_shape_ck still exempts goal_id IS NULL; that branch
+    -- is now unreachable (NOT NULL) and is left alone rather than re-typed.
+    -- No goal values here (public repo). Idempotent: a re-run finds nothing to delete and re-asserts the shape.
+
+    BEGIN;
+
+    -- Refuse to delete anything unexpected: the only identity-less rows may be the two legacy ones.
+    DO $$
+    DECLARE stray text;
+    BEGIN
+      SELECT string_agg(metric, ', ') INTO stray FROM ops.goal WHERE goal_id IS NULL AND metric NOT IN ('weight_kg', 'height_m');
+      IF stray IS NOT NULL THEN RAISE EXCEPTION '0008: unexpected goal rows without goal_id: %', stray; END IF;
+      -- Height must already live in ops.setting (0006 copied it) before its legacy row goes.
+      IF EXISTS (SELECT 1 FROM ops.goal WHERE metric = 'height_m')
+         AND NOT EXISTS (SELECT 1 FROM ops.setting WHERE key = 'height_m') THEN
+        RAISE EXCEPTION '0008: ops.setting has no height_m; refusing to drop the legacy height row';
+      END IF;
+    END $$;
+
+    CREATE TEMP TABLE goal_ids_before ON COMMIT DROP AS SELECT goal_id, active FROM ops.goal WHERE goal_id IS NOT NULL;
+
+    DELETE FROM ops.goal WHERE goal_id IS NULL AND metric IN ('weight_kg', 'height_m');
+
+    ALTER TABLE ops.goal ALTER COLUMN goal_id SET NOT NULL;
+    ALTER TABLE ops.goal DROP CONSTRAINT IF EXISTS goal_pkey;
+    ALTER TABLE ops.goal ADD CONSTRAINT goal_pkey PRIMARY KEY (goal_id);
+    DROP INDEX IF EXISTS ops.goal_goal_id_uq;   -- redundant with the primary key
+    ALTER TABLE ops.goal DROP CONSTRAINT IF EXISTS goal_metric_uq;
+    ALTER TABLE ops.goal ADD CONSTRAINT goal_metric_uq UNIQUE (metric);
+
+    -- ── assertions ───────────────────────────────────────────────────────────────────────────────────
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM ops.goal WHERE metric IN ('weight_kg', 'height_m')) THEN
+        RAISE EXCEPTION '0008: legacy rows still present';
+      END IF;
+      -- Every real goal survived, with its active flag unchanged.
+      IF EXISTS (SELECT goal_id, active FROM goal_ids_before EXCEPT SELECT goal_id, active FROM ops.goal)
+         OR EXISTS (SELECT goal_id, active FROM ops.goal EXCEPT SELECT goal_id, active FROM goal_ids_before) THEN
+        RAISE EXCEPTION '0008: the set of goals changed';
+      END IF;
+      IF (SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'ops.goal'::regclass AND conname = 'goal_pkey')
+         IS DISTINCT FROM 'PRIMARY KEY (goal_id)' THEN
+        RAISE EXCEPTION '0008: primary key is not (goal_id)';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'ops.goal'::regclass AND conname = 'goal_metric_uq' AND contype = 'u') THEN
+        RAISE EXCEPTION '0008: metric is no longer unique';
+      END IF;
+      -- The views over ops.goal still plan and run.
+      PERFORM count(*) FROM ops.goal_progress_latest_v;
+      PERFORM count(*) FROM ops.goal_health_v;
+    END $$;
+
+    -- Negative controls: each must be rejected for the reason named (subtransactions, so nothing persists).
+    DO $$
+    BEGIN
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, start_date, label, unit)
+          VALUES ('zz_0008_a', NULL, 'undated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x');
+        RAISE EXCEPTION '0008 control: a goal without goal_id was accepted';
+      EXCEPTION WHEN not_null_violation THEN NULL;
+      END;
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, start_date, label, unit)
+          VALUES ('zz_0008_b', 'zz_0008_dup', 'undated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x'),
+                 ('zz_0008_c', 'zz_0008_dup', 'undated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x');
+        RAISE EXCEPTION '0008 control: a duplicate goal_id was accepted';
+      EXCEPTION WHEN unique_violation THEN NULL;
+      END;
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, start_date, label, unit)
+          VALUES ('zz_0008_m', 'zz_0008_d', 'undated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x'),
+                 ('zz_0008_m', 'zz_0008_e', 'undated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x');
+        RAISE EXCEPTION '0008 control: a duplicate metric was accepted';
+      EXCEPTION WHEN unique_violation THEN NULL;
+      END;
+      -- Positive control: a well-formed goal is accepted (then rolled back by the enclosing subtransaction).
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, start_date, label, unit)
+          VALUES ('zz_0008_ok', 'zz_0008_ok', 'undated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x');
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'zz_0008_rollback';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'zz_0008_rollback' THEN RAISE; END IF;
+      END;
+      IF EXISTS (SELECT 1 FROM ops.goal WHERE goal_id LIKE 'zz_0008%') THEN RAISE EXCEPTION '0008: control rows leaked'; END IF;
+    END $$;
+
+    COMMIT;
