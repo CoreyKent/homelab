@@ -745,3 +745,23 @@ data:
     $$;
 
     COMMIT;
+  0007_expenditure.sql: |
+    -- 0007: MacroFactor's expenditure estimate (TDEE), one value per day (22/11/2026).
+    --
+    -- Only exports with "Expenditure" ticked carry the sheet, so the importer upserts it
+    -- when present and leaves stored rows alone when absent. Keyed like nutrition.daily.
+    -- The weekly report compares it with expenditure measured from logged intake and the
+    -- Withings weight trend. Schema only: no values here (the repo is public).
+    -- Idempotent: safe to re-run.
+
+    CREATE TABLE IF NOT EXISTS nutrition.expenditure (
+        date             date    NOT NULL,
+        source           text    NOT NULL,
+        expenditure_kcal numeric NOT NULL CHECK (expenditure_kcal > 0 AND expenditure_kcal < 10000),
+        fetched_at       text    NOT NULL,
+        PRIMARY KEY (date, source)
+    );
+
+    GRANT SELECT, INSERT, UPDATE, DELETE ON nutrition.expenditure TO qs_writer;
+    -- Carter reads by membership of qs_reader (cluster.yaml), so this covers it too.
+    GRANT SELECT ON nutrition.expenditure TO qs_reader;

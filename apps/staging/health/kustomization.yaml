@@ -19,6 +19,7 @@ resources:
   - migrate-job-0004.yaml
   - migrate-job-0005.yaml
   - migrate-job-0006.yaml
+  - migrate-job-0007.yaml
   - backup-pvc.yaml
   - pg-tailnet-service.yaml
   - pgdump-cronjob.yaml
