@@ -1,0 +1,49 @@
+# Dead-man for the goals job (22/11/2026). The goals job runs OFF-cluster (claude-pai cron), so if claude-pai is
+# down nothing it does can raise an alarm. This hourly in-cluster check reads ops.goal_health_v as qs_reader and
+# exits non-zero unless the latest complete goals run is < 26 h old, covered every active goal, and left none
+# stale. A failing Job stops refreshing kube_cronjob_status_last_successful_time, and Gatus endpoint
+# `health-goals-fresh` alerts on that via the existing ntfy path — no new secrets, no exporter.
+# With no active goals the view reports ok (nothing to watch), so deploying before the seed is silent.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: goals-deadman
+spec:
+  timeZone: Australia/Sydney
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: check
+              image: ghcr.io/cloudnative-pg/postgresql:18.4
+              env:
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-reader
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-reader
+                      key: password
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  row=$(psql "host=health-pg-rw.health.svc dbname=health sslmode=require connect_timeout=10" -v ON_ERROR_STOP=1 -tA -F ' ' \
+                    -c "SELECT ok, active_goals, goals_in_latest_run, stale_goals, coalesce(round(latest_ok_age_hours::numeric,1)::text,'none') FROM ops.goal_health_v")
+                  echo "ok active covered stale age_h: $row"
+                  case "$row" in t\ *) exit 0 ;; *) exit 1 ;; esac
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }

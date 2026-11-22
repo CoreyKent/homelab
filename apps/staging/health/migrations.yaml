@@ -508,3 +508,240 @@ data:
     GRANT SELECT ON nutrition.supplement_schedule TO qs_reader;
 
     COMMIT;
+  0006_goals.sql: |
+    -- 0006: goals & trajectory (22/11/2026). EXPAND ONLY — nothing existing is dropped or renamed.
+    --
+    -- ops.goal gains a goal_id identity and per-kind columns so several goals can share one source series
+    -- (the two body-fat goals read the same Withings series). Legacy rows (metric='weight_kg', 'height_m')
+    -- keep goal_id NULL and stay exactly as they are until the overview/withings/BMI panels are proven on the
+    -- new shape; a later migration removes them. Goal VALUES are never written here — this repo is public;
+    -- they are seeded by hand from a private file. The only data statement copies an existing row (height)
+    -- into ops.setting without naming its value.
+    --
+    -- Results: the goals job (claude-pai) READS with qs_reader and WRITES with qs_goals, which may only
+    -- INSERT into the three result tables. A run is committed in one transaction with its goal_run row
+    -- (status 'ok', written_count = expected_count); readers select the latest such run by run_id.
+    -- Failed runs get a separate 'failed' row. Nothing is ever updated or deleted by the job.
+
+    BEGIN;
+
+    -- ── ops.goal: expand ────────────────────────────────────────────────────────────────────────────
+    ALTER TABLE ops.goal ALTER COLUMN target DROP NOT NULL;   -- band goals have no single target
+    ALTER TABLE ops.goal
+      ADD COLUMN IF NOT EXISTS goal_id         text,
+      ADD COLUMN IF NOT EXISTS kind            text,
+      ADD COLUMN IF NOT EXISTS source_key      text,
+      ADD COLUMN IF NOT EXISTS direction       text,
+      ADD COLUMN IF NOT EXISTS start_date      date,
+      ADD COLUMN IF NOT EXISTS start_value     numeric(8,3),
+      ADD COLUMN IF NOT EXISTS band_lo         numeric(8,3),
+      ADD COLUMN IF NOT EXISTS band_hi         numeric(8,3),
+      ADD COLUMN IF NOT EXISTS calib_offset    numeric(6,3) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS calib_offset_sd numeric(6,3) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS unit            text,
+      ADD COLUMN IF NOT EXISTS label           text,
+      ADD COLUMN IF NOT EXISTS active          boolean NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS sort            integer NOT NULL DEFAULT 100,
+      ADD COLUMN IF NOT EXISTS closed_at       date,
+      ADD COLUMN IF NOT EXISTS closed_value    numeric(8,3);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS goal_goal_id_uq ON ops.goal (goal_id);
+
+    -- Per-kind shape. Legacy rows (goal_id NULL) are exempt. Drop-then-add keeps a Job re-run idempotent.
+    ALTER TABLE ops.goal DROP CONSTRAINT IF EXISTS goal_kind_shape_ck;
+    ALTER TABLE ops.goal ADD CONSTRAINT goal_kind_shape_ck CHECK (
+      goal_id IS NULL OR (
+        goal_id ~ '^[a-z][a-z0-9_]{1,40}$'
+        AND label IS NOT NULL AND unit IS NOT NULL AND start_date IS NOT NULL
+        AND calib_offset_sd >= 0
+        AND source_key IN ('withings.fat_ratio', 'withings.muscle_mass', 'withings.weight',
+                           'nutrition.protein_g', 'garmin.strength_training', 'garmin.mixed_martial_arts',
+                           'garmin.sleep_hours')
+        AND CASE kind
+          WHEN 'dated'   THEN target IS NOT NULL AND target_date IS NOT NULL AND direction IN ('up','down')
+          WHEN 'undated' THEN target IS NOT NULL AND target_date IS NULL     AND direction IN ('up','down')
+          WHEN 'band'    THEN band_lo IS NOT NULL AND band_hi IS NOT NULL AND band_lo < band_hi
+                              AND target IS NULL AND direction IS NULL
+          WHEN 'count'   THEN target IS NOT NULL AND direction IN ('up','down')
+          WHEN 'mean'    THEN target IS NOT NULL AND direction IN ('up','down')
+          WHEN 'intake'  THEN target IS NOT NULL AND direction IN ('up','down')
+          ELSE false
+        END
+      )
+    );
+
+    -- ── ops.setting: constants are not goals ────────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS ops.setting (
+      key        text PRIMARY KEY,
+      value      numeric(10,4) NOT NULL,
+      unit       text,
+      note       text,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    INSERT INTO ops.setting (key, value, unit, note)
+      SELECT 'height_m', target, 'm', 'copied from ops.goal by 0006'
+      FROM ops.goal WHERE metric = 'height_m' AND target IS NOT NULL
+      ON CONFLICT (key) DO NOTHING;
+
+    -- ── results ─────────────────────────────────────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS ops.goal_run (
+      run_id          uuid PRIMARY KEY,
+      job             text NOT NULL DEFAULT 'goals' CHECK (job = 'goals'),
+      started_at      timestamptz NOT NULL,
+      finished_at     timestamptz NOT NULL DEFAULT now(),
+      status          text NOT NULL CHECK (status IN ('ok','failed')),
+      expected_count  integer NOT NULL CHECK (expected_count >= 0),
+      written_count   integer NOT NULL CHECK (written_count >= 0),
+      engine_version  text NOT NULL,
+      error           text
+    );
+    CREATE INDEX IF NOT EXISTS goal_run_ok_idx ON ops.goal_run (finished_at DESC) WHERE status = 'ok';
+
+    CREATE TABLE IF NOT EXISTS ops.goal_progress (
+      run_id             uuid NOT NULL REFERENCES ops.goal_run (run_id),
+      goal_id            text NOT NULL,
+      as_of              date NOT NULL,
+      state              text NOT NULL,
+      window_from        date,
+      n                  integer NOT NULL,
+      span_days          integer NOT NULL,
+      fitted             numeric(10,4),
+      slope_wk           numeric(10,4),
+      hw95_wk            numeric(10,4),
+      target_used        numeric(10,4),
+      offset_used        numeric(6,3) NOT NULL,
+      required_wk        numeric(10,4),
+      projected          numeric(10,4),
+      projected_lo       numeric(10,4),
+      projected_hi       numeric(10,4),
+      eta_weeks          numeric(8,2),
+      current_value      numeric(10,4),
+      weeks_met          integer,
+      source_age_days    numeric(8,2),
+      last_evidence_date date,
+      detail             text NOT NULL,
+      PRIMARY KEY (run_id, goal_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ops.goal_trajectory (
+      run_id  uuid NOT NULL REFERENCES ops.goal_run (run_id),
+      goal_id text NOT NULL,
+      series  text NOT NULL CHECK (series IN ('central','lo','hi','required','plan')),
+      day     date NOT NULL,
+      value   numeric(10,4) NOT NULL,
+      PRIMARY KEY (run_id, goal_id, series, day)
+    );
+
+    -- Latest COMPLETE successful run. Every panel and the dead-man read through these, never max(as_of).
+    CREATE OR REPLACE VIEW ops.goal_latest_run_v AS
+      SELECT r.* FROM ops.goal_run r
+      WHERE r.status = 'ok' AND r.written_count = r.expected_count
+      ORDER BY r.finished_at DESC
+      LIMIT 1;
+
+    CREATE OR REPLACE VIEW ops.goal_progress_latest_v AS
+      SELECT p.*, g.label, g.unit, g.kind, g.direction, g.target, g.target_date, g.band_lo, g.band_hi,
+             g.sort, r.finished_at AS run_finished_at
+      FROM ops.goal_latest_run_v r
+      JOIN ops.goal_progress p ON p.run_id = r.run_id
+      JOIN ops.goal g ON g.goal_id = p.goal_id;
+
+    CREATE OR REPLACE VIEW ops.goal_trajectory_latest_v AS
+      SELECT t.* FROM ops.goal_latest_run_v r JOIN ops.goal_trajectory t ON t.run_id = r.run_id;
+
+    -- One row the dead-man checks. ok = nothing to watch (no active goals yet), OR a complete run in the last
+    -- 26 h that covered every active goal and left none stale. Fails closed: a missing run means ok = false.
+    CREATE OR REPLACE VIEW ops.goal_health_v AS
+      WITH active AS (SELECT goal_id FROM ops.goal WHERE goal_id IS NOT NULL AND active),
+           r AS (SELECT * FROM ops.goal_latest_run_v),
+           covered AS (SELECT count(*) AS n FROM active a JOIN ops.goal_progress p
+                         ON p.goal_id = a.goal_id AND p.run_id = (SELECT run_id FROM r)),
+           stale AS (SELECT count(*) AS n FROM ops.goal_progress p
+                       WHERE p.run_id = (SELECT run_id FROM r) AND p.state = 'stale-data')
+      SELECT (SELECT count(*) FROM active)                                       AS active_goals,
+             (SELECT n FROM covered)                                             AS goals_in_latest_run,
+             (SELECT n FROM stale)                                               AS stale_goals,
+             (SELECT extract(epoch FROM now() - finished_at) / 3600 FROM r)      AS latest_ok_age_hours,
+             (SELECT count(*) FROM active) = 0
+               OR (    coalesce((SELECT finished_at FROM r) > now() - interval '26 hours', false)
+                   AND (SELECT n FROM covered) = (SELECT count(*) FROM active)
+                   AND (SELECT n FROM stale) = 0)                                AS ok;
+
+    -- ── grants ──────────────────────────────────────────────────────────────────────────────────────
+    -- qs_goals: INSERT only, on the three result tables. No SELECT anywhere, nothing on ops.goal.
+    GRANT USAGE ON SCHEMA ops TO qs_goals;
+    GRANT INSERT ON ops.goal_run, ops.goal_progress, ops.goal_trajectory TO qs_goals;
+    -- qs_reader (Grafana, the job's read side, carter by membership): read the new objects.
+    GRANT SELECT ON ops.setting, ops.goal_run, ops.goal_progress, ops.goal_trajectory,
+                    ops.goal_latest_run_v, ops.goal_progress_latest_v, ops.goal_trajectory_latest_v,
+                    ops.goal_health_v TO qs_reader;
+
+    -- ── assertions (synthetic, rolled back inside sub-transactions) ─────────────────────────────────
+    DO $$
+    BEGIN
+      -- a dated goal without a date must be rejected
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, start_date, label, unit)
+          VALUES ('__assert_1', 'zz_assert_dated', 'dated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x');
+        RAISE EXCEPTION 'assertion: dated goal without target_date was accepted';
+      EXCEPTION WHEN check_violation THEN NULL;
+      END;
+      -- a band goal with lo >= hi must be rejected
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, band_lo, band_hi, start_date, label, unit)
+          VALUES ('__assert_2', 'zz_assert_band', 'band', 'withings.weight', 2, 1, DATE '2000-01-01', 'x', 'x');
+        RAISE EXCEPTION 'assertion: inverted band was accepted';
+      EXCEPTION WHEN check_violation THEN NULL;
+      END;
+      -- positive controls: one valid row per kind is ACCEPTED, so the rejections above fail for the
+    -- reason they test and not for an unrelated column (rolled back via P0099)
+    BEGIN
+      INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, target_date, band_lo, band_hi, start_date, label, unit) VALUES
+        ('zz_c1','zz_c_dated','dated','withings.fat_ratio','down',1,DATE '2000-02-01',NULL,NULL,DATE '2000-01-01','x','x'),
+        ('zz_c2','zz_c_undated','undated','withings.muscle_mass','up',1,NULL,NULL,NULL,DATE '2000-01-01','x','x'),
+        ('zz_c3','zz_c_band','band','withings.weight',NULL,NULL,NULL,1,2,DATE '2000-01-01','x','x'),
+        ('zz_c4','zz_c_count','count','garmin.strength_training','up',1,NULL,NULL,NULL,DATE '2000-01-01','x','x'),
+        ('zz_c5','zz_c_mean','mean','garmin.sleep_hours','up',1,NULL,NULL,NULL,DATE '2000-01-01','x','x'),
+        ('zz_c6','zz_c_intake','intake','nutrition.protein_g','up',1,NULL,NULL,NULL,DATE '2000-01-01','x','x');
+      RAISE SQLSTATE 'P0099';
+    EXCEPTION WHEN SQLSTATE 'P0099' THEN NULL;
+    END;
+    -- an unknown source must be rejected
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, start_date, label, unit)
+          VALUES ('__assert_3', 'zz_assert_src', 'undated', 'garmin.nope', 'up', 1, DATE '2000-01-01', 'x', 'x');
+        RAISE EXCEPTION 'assertion: unknown source_key was accepted';
+      EXCEPTION WHEN check_violation THEN NULL;
+      END;
+      -- legacy rows still satisfy the table (expand-only)
+      IF EXISTS (SELECT 1 FROM ops.goal WHERE goal_id IS NULL AND metric = 'weight_kg' AND target IS NULL) THEN
+        RAISE EXCEPTION 'assertion: legacy weight_kg row lost its target';
+      END IF;
+      -- least privilege
+      IF has_table_privilege('qs_goals', 'ops.goal', 'SELECT') OR has_table_privilege('qs_goals', 'ops.goal', 'UPDATE')
+         OR has_table_privilege('qs_goals', 'ops.goal_progress', 'DELETE')
+         OR has_table_privilege('qs_goals', 'ops.goal_progress', 'UPDATE')
+         OR has_table_privilege('qs_goals', 'withings.measurement', 'SELECT') THEN
+        RAISE EXCEPTION 'assertion: qs_goals has more than INSERT on the result tables';
+      END IF;
+      IF NOT has_table_privilege('qs_goals', 'ops.goal_progress', 'INSERT') THEN
+        RAISE EXCEPTION 'assertion: qs_goals cannot insert progress';
+      END IF;
+      IF has_table_privilege('qs_reader', 'ops.goal_progress', 'INSERT') THEN
+        RAISE EXCEPTION 'assertion: qs_reader can write results';
+      END IF;
+      -- with no runs the health view must fail closed once a goal is active (checked on a synthetic goal)
+      BEGIN
+        INSERT INTO ops.goal (metric, goal_id, kind, source_key, direction, target, start_date, label, unit)
+          VALUES ('__assert_4', 'zz_assert_live', 'undated', 'withings.weight', 'down', 1, DATE '2000-01-01', 'x', 'x');
+        IF (SELECT ok FROM ops.goal_health_v) IS DISTINCT FROM false
+           AND NOT EXISTS (SELECT 1 FROM ops.goal_latest_run_v) THEN
+          RAISE EXCEPTION 'assertion: health view reported ok with an active goal and no run';
+        END IF;
+        RAISE SQLSTATE 'P0099';  -- undo the synthetic row
+      EXCEPTION WHEN SQLSTATE 'P0099' THEN NULL;
+      END;
+    END
+    $$;
+
+    COMMIT;

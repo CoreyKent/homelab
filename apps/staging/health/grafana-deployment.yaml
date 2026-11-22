@@ -113,6 +113,10 @@ spec:
               mountPath: /var/lib/grafana/dashboards/overview.json
               subPath: overview.json
               readOnly: true
+            - name: grafana-dashboard-goals
+              mountPath: /var/lib/grafana/dashboards/goals.json
+              subPath: goals.json
+              readOnly: true
       volumes:
         - name: grafana-ini
           configMap:
@@ -137,3 +141,6 @@ spec:
         - name: grafana-dashboard-overview
           configMap:
             name: grafana-dashboard-overview
+        - name: grafana-dashboard-goals
+          configMap:
+            name: grafana-dashboard-goals

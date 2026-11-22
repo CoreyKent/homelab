@@ -7,6 +7,7 @@ resources:
   - pg-qs-writer.secret.yaml
   - pg-qs-reader.secret.yaml
   - pg-carter.secret.yaml
+  - pg-qs-goals.secret.yaml
   - withings-app.secret.yaml
   # Garmin tokenstore seed — sealed from Corey MFA bootstrap 23/07/2026; DB becomes authoritative after first run.
   - garmin-tokenstore.secret.yaml
@@ -17,9 +18,11 @@ resources:
   - migrate-job-0003.yaml
   - migrate-job-0004.yaml
   - migrate-job-0005.yaml
+  - migrate-job-0006.yaml
   - backup-pvc.yaml
   - pg-tailnet-service.yaml
   - pgdump-cronjob.yaml
+  - goals-deadman-cronjob.yaml
   - garmin-cronjob.yaml
   - withings-cronjob.yaml
   # Grafana admin secret — sealed by the orchestrator; referenced here, never authored by the builder.
@@ -35,4 +38,5 @@ resources:
   - grafana-dashboard-garmin.yaml
   - grafana-dashboard-withings.yaml
   - grafana-dashboard-overview.yaml
+  - grafana-dashboard-goals.yaml
 # backfill-job.yaml is intentionally excluded: it is a manual kubectl create -f template, and Jobs are immutable.

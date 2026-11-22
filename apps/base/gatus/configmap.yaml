@@ -75,6 +75,22 @@ data:
           - "[STATUS] == 200"
           # 4 = gitea-backup-nightly + pg-dump-nightly in BOTH health and markets (same name, two namespaces) + itpm-backup.
           - "[BODY].data.result[0].value[1] == 4"
+      # HEALTH GOALS (22/11/2026): the goals job runs on claude-pai, so its dead-man lives in the cluster —
+      # CronJob health/goals-deadman (every 15 min) succeeds only while the latest complete goals run is
+      # < 26 h old, covered every active goal and left none stale. Healthy = 1 success in the last hour.
+      # Fails CLOSED like backups-fresh: no metric (job never succeeded, KSM/Prometheus down) -> alert.
+      # Expect at most one alert in the first ~15 min after the CronJob is first created.
+      - name: health-goals-fresh
+        alerts:
+          - type: ntfy
+            enabled: true
+            description: "health goals dashboard is stale: goals job missed, incomplete, or a goal's source data is stale"
+        group: platform
+        url: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/query?query=count(time()%20-%20kube_cronjob_status_last_successful_time%7Bnamespace%3D%22health%22%2Ccronjob%3D%22goals-deadman%22%7D%20%3C%203600)"
+        interval: 5m
+        conditions:
+          - "[STATUS] == 200"
+          - "[BODY].data.result[0].value[1] == 1"
       # CLAUDE-PAI ON THE TAILNET — the VM serving pulse/rockmonkey and pushing to Gitea. Reached
       # through the claude-pai-tailnet egress Service (claude-pai-tailnet.yaml). Caddy answers
       # plain-HTTP with a 308 to https for a known Host, so 308 proves the tailnet path AND Caddy.
