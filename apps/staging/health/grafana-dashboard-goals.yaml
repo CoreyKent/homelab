@@ -3209,7 +3209,8 @@ data:
                 "showPoints": "never",
                 "spanNulls": true
               },
-              "decimals": 2
+              "decimals": 2,
+              "min": 0
             },
             "overrides": [
               {
@@ -3615,7 +3616,7 @@ data:
               "calcs": [
                 "lastNotNull"
               ],
-              "fields": "",
+              "fields": "/.*/",
               "values": false
             },
             "colorMode": "background",

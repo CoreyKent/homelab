@@ -146,12 +146,13 @@ data:
               },
               "format": "table",
               "rawQuery": true,
-              "rawSql": "SELECT (SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) - g.target AS \"delta\" FROM ops.goal g WHERE g.metric = 'weight_kg'",
+              "rawSql": "SELECT CASE WHEN p.current_value < p.band_lo THEN p.current_value - p.band_lo WHEN p.current_value > p.band_hi THEN p.current_value - p.band_hi ELSE 0 END::float8 AS \"kg outside band\" FROM ops.goal_progress_latest_v p WHERE p.goal_id = 'weight_hold'",
               "refId": "A"
             }
           ],
-          "title": "Δ to Goal (kg)",
-          "type": "stat"
+          "title": "Outside hold band (kg)",
+          "type": "stat",
+          "description": "7-day mean weight's distance outside the hold band (0 = inside), from the latest goals run. Negative = below the band. Band and mean: ops.goal / ops.goal_progress_latest_v (Goals & Trajectory dashboard)."
         },
         {
           "datasource": {
@@ -364,7 +365,7 @@ data:
         {
           "id": 6,
           "type": "timeseries",
-          "title": "Weight (kg) + goal",
+          "title": "Weight (kg) + hold band",
           "gridPos": {
             "h": 7,
             "w": 8,
@@ -397,8 +398,8 @@ data:
               },
               {
                 "matcher": {
-                  "id": "byName",
-                  "options": "Goal"
+                  "id": "byRegexp",
+                  "options": "^Band (low|high)$"
                 },
                 "properties": [
                   {
@@ -451,7 +452,7 @@ data:
               },
               "format": "time_series",
               "rawQuery": true,
-              "rawSql": "SELECT dw.local_date AS \"time\",g.target AS \"Goal\" FROM withings.daily_weight dw LEFT JOIN ops.goal g ON g.metric='weight_kg' WHERE $__timeFilter(dw.local_date) ORDER BY 1",
+              "rawSql": "SELECT dw.local_date AS \"time\", g.band_lo::float8 AS \"Band low\", g.band_hi::float8 AS \"Band high\" FROM withings.daily_weight dw CROSS JOIN ops.goal g WHERE g.goal_id = 'weight_hold' AND g.active AND $__timeFilter(dw.local_date) ORDER BY 1",
               "refId": "B"
             }
           ]

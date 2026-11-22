@@ -28,9 +28,9 @@ data:
             "format": "table",
             "hide": false,
             "iconColor": "rgba(201, 133, 0, 1)",
-            "name": "Goal date",
-            "rawQuery": "SELECT EXTRACT(EPOCH FROM g.target_date::timestamp)*1000 AS time, 'Goal: ' || g.target || ' kg' AS text FROM ops.goal g WHERE g.metric = 'weight_kg' AND g.target_date IS NOT NULL",
-            "rawSql": "SELECT EXTRACT(EPOCH FROM g.target_date::timestamp)*1000 AS time, 'Goal: ' || g.target || ' kg' AS text FROM ops.goal g WHERE g.metric = 'weight_kg' AND g.target_date IS NOT NULL",
+            "name": "Goal dates",
+            "rawQuery": "SELECT EXTRACT(EPOCH FROM g.target_date::timestamp)*1000 AS time, g.label || ': ' || CASE g.direction WHEN 'down' THEN '≤ ' ELSE '≥ ' END || g.target::float8 || ' ' || g.unit AS text FROM ops.goal g WHERE g.goal_id IS NOT NULL AND g.active AND g.kind = 'dated' AND g.target_date IS NOT NULL",
+            "rawSql": "SELECT EXTRACT(EPOCH FROM g.target_date::timestamp)*1000 AS time, g.label || ': ' || CASE g.direction WHEN 'down' THEN '≤ ' ELSE '≥ ' END || g.target::float8 || ' ' || g.unit AS text FROM ops.goal g WHERE g.goal_id IS NOT NULL AND g.active AND g.kind = 'dated' AND g.target_date IS NOT NULL",
             "type": "dashboard"
           }
         ]
@@ -119,8 +119,8 @@ data:
               },
               {
                 "matcher": {
-                  "id": "byName",
-                  "options": "Goal"
+                  "id": "byRegexp",
+                  "options": "^Band (low|high)$"
                 },
                 "properties": [
                   {
@@ -205,11 +205,11 @@ data:
               "editorMode": "code",
               "format": "time_series",
               "rawQuery": true,
-              "rawSql": "SELECT dw.local_date AS \"time\", g.target AS \"Goal\" FROM withings.daily_weight dw LEFT JOIN ops.goal g ON g.metric = 'weight_kg' WHERE $__timeFilter(dw.local_date) ORDER BY 1",
+              "rawSql": "SELECT dw.local_date AS \"time\", g.band_lo::float8 AS \"Band low\", g.band_hi::float8 AS \"Band high\" FROM withings.daily_weight dw CROSS JOIN ops.goal g WHERE g.goal_id = 'weight_hold' AND g.active AND $__timeFilter(dw.local_date) ORDER BY 1",
               "refId": "C"
             }
           ],
-          "title": "Weight (kg) — daily, 7d avg, goal",
+          "title": "Weight (kg) — daily, 7d avg, hold band",
           "type": "timeseries"
         },
         {
@@ -256,12 +256,13 @@ data:
               "editorMode": "code",
               "format": "table",
               "rawQuery": true,
-              "rawSql": "SELECT (SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) - g.target AS \"kg to goal\" FROM ops.goal g WHERE g.metric = 'weight_kg'",
+              "rawSql": "SELECT CASE WHEN p.current_value < p.band_lo THEN p.current_value - p.band_lo WHEN p.current_value > p.band_hi THEN p.current_value - p.band_hi ELSE 0 END::float8 AS \"kg outside band\" FROM ops.goal_progress_latest_v p WHERE p.goal_id = 'weight_hold'",
               "refId": "A"
             }
           ],
-          "title": "Distance to Goal (kg)",
-          "type": "stat"
+          "title": "Outside hold band (kg)",
+          "type": "stat",
+          "description": "7-day mean weight's distance outside the hold band (0 = inside), from the latest goals run. Negative = below the band. Band and mean: ops.goal / ops.goal_progress_latest_v (Goals & Trajectory dashboard)."
         },
         {
           "datasource": {
@@ -271,7 +272,66 @@ data:
           "fieldConfig": {
             "defaults": {
               "decimals": 2,
-              "noValue": "No goal set"
+              "noValue": "No goal set",
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "in-band": {
+                      "color": "green",
+                      "index": 0,
+                      "text": "in band"
+                    },
+                    "at-risk": {
+                      "color": "orange",
+                      "index": 1,
+                      "text": "at risk"
+                    },
+                    "out-high-recovering": {
+                      "color": "yellow",
+                      "index": 2,
+                      "text": "out high recovering"
+                    },
+                    "out-low-recovering": {
+                      "color": "yellow",
+                      "index": 3,
+                      "text": "out low recovering"
+                    },
+                    "out-high-worsening": {
+                      "color": "red",
+                      "index": 4,
+                      "text": "out high worsening"
+                    },
+                    "out-low-worsening": {
+                      "color": "red",
+                      "index": 5,
+                      "text": "out low worsening"
+                    },
+                    "insufficient-data": {
+                      "color": "blue",
+                      "index": 6,
+                      "text": "insufficient data"
+                    },
+                    "stale-data": {
+                      "color": "purple",
+                      "index": 7,
+                      "text": "stale data"
+                    }
+                  }
+                }
+              ],
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
             },
             "overrides": []
           },
@@ -283,7 +343,7 @@ data:
           },
           "id": 3,
           "options": {
-            "colorMode": "none",
+            "colorMode": "background",
             "graphMode": "none",
             "justifyMode": "auto",
             "orientation": "auto",
@@ -291,11 +351,11 @@ data:
               "calcs": [
                 "lastNotNull"
               ],
-              "fields": "",
+              "fields": "/.*/",
               "values": false
             },
             "showPercentChange": false,
-            "textMode": "auto",
+            "textMode": "value",
             "wideLayout": true
           },
           "targets": [
@@ -307,12 +367,13 @@ data:
               "editorMode": "code",
               "format": "table",
               "rawQuery": true,
-              "rawSql": "SELECT ((SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) - g.target) / NULLIF(EXTRACT(EPOCH FROM (g.target_date::timestamp - now())) / 604800.0, 0) AS \"kg/week\" FROM ops.goal g WHERE g.metric = 'weight_kg' AND g.target_date IS NOT NULL",
+              "rawSql": "SELECT p.state AS \"Verdict\" FROM ops.goal_progress_latest_v p WHERE p.goal_id = 'weight_hold'",
               "refId": "A"
             }
           ],
-          "title": "Required Pace (kg/week)",
-          "type": "stat"
+          "title": "Weight hold verdict",
+          "type": "stat",
+          "description": "The Goals & Trajectory dashboard's verdict on the hold band: the 7-day mean against the band, and whether the 8-week central projection leaves it."
         },
         {
           "datasource": {
@@ -610,7 +671,7 @@ data:
               "editorMode": "code",
               "format": "table",
               "rawQuery": true,
-              "rawSql": "SELECT (SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) / NULLIF(g.target * g.target, 0) AS \"BMI\" FROM ops.goal g WHERE g.metric = 'height_m';",
+              "rawSql": "SELECT (SELECT weight_kg FROM withings.daily_weight ORDER BY local_date DESC LIMIT 1) / NULLIF(s.value * s.value, 0) AS \"BMI\" FROM ops.setting s WHERE s.key = 'height_m'",
               "refId": "A"
             }
           ]
