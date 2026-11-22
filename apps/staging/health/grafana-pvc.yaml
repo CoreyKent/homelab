@@ -2,7 +2,7 @@
 #
 # Was emptyDir until 2026-07-31, meaning every pod reschedule silently discarded
 # it. That went unnoticed because the *dashboards* are provisioned from
-# configMaps (grafana-dashboard-garmin / -withings / -overview) and regenerate —
+# configMaps (grafana-dashboard-*, generated from dashboards/) and regenerate —
 # so the UI looked intact while annotations and users did not survive.
 #
 # 1Gi is the floor, not a guess: the Synology CSI driver rejects anything

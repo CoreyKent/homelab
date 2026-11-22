@@ -82,12 +82,14 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 5
+          # 512Mi OOMKilled on 22/11/2026: idle ~310 MiB (cgroup), and loading the 12-panel Goals & Trajectory
+          # dashboard peaked at 506 MiB of 512 when measured, after one OOMKill (exit 137) during the same load.
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 384Mi
             limits:
-              memory: 512Mi
+              memory: 1Gi
           volumeMounts:
             - name: grafana-ini
               mountPath: /etc/grafana/grafana.ini
@@ -101,6 +103,8 @@ spec:
               readOnly: true
             - name: grafana-storage
               mountPath: /var/lib/grafana
+            # subPath mounts never refresh in a running pod; the hashed ConfigMap names (kustomization.yaml
+            # configMapGenerator) roll the pod whenever a dashboard changes instead.
             - name: grafana-dashboard-garmin
               mountPath: /var/lib/grafana/dashboards/garmin.json
               subPath: garmin.json
