@@ -18,7 +18,8 @@ from typing import Any
 
 import psycopg
 
-from collector import backfill, db, garmin_auth, garmin_sync, state, withings_sync
+from collector import backfill, db, garmin_auth, garmin_sync, hevy_sync, state, withings_sync
+from collector.hevy_api import HevyAuthError, HevyClient
 from collector.config import ConfigError, load_config
 from collector.withings_auth import WithingsAuthError
 
@@ -62,6 +63,20 @@ def _run_withings() -> int:
     try:
         conn = db.connect(cfg)
         ok = withings_sync.run_cron(conn, cfg)
+        return 0 if ok else 1
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _run_hevy() -> int:
+    cfg = load_config(require_hevy=True)
+    assert cfg.hevy_api_key is not None
+    client = HevyClient(cfg.hevy_api_key)
+    conn: Any | None = None
+    try:
+        conn = db.connect(cfg)
+        ok = hevy_sync.run_cron(conn, cfg, client)
         return 0 if ok else 1
     finally:
         if conn is not None:
@@ -170,6 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("garmin", help="Run the Garmin cron sync.")
     subparsers.add_parser("withings", help="Run the Withings cron sync.")
+    subparsers.add_parser("hevy", help="Run the Hevy full-snapshot sync (read-only API use).")
 
     backfill_parser = subparsers.add_parser("backfill", help="Run bounded historical backfill.")
     backfill_parser.add_argument(
@@ -215,6 +231,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_garmin()
         if args.command == "withings":
             return _run_withings()
+        if args.command == "hevy":
+            return _run_hevy()
         if args.command == "backfill":
             return _run_backfill(args)
         if args.command == "bootstrap-garmin":
@@ -223,7 +241,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    except (garmin_auth.GarminAuthError, WithingsAuthError) as exc:
+    except (garmin_auth.GarminAuthError, WithingsAuthError, HevyAuthError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     except state.AccountBlockedError:

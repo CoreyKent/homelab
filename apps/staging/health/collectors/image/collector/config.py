@@ -27,6 +27,7 @@ class Config:
     garmin_seed_path: str
     tz_local: str
     garmin_pacing_min: float
+    hevy_api_key: str | None = None
 
 
 def _read_env(name: str) -> str | None:
@@ -51,11 +52,12 @@ def _parse_float(name: str, raw_value: str) -> float:
         raise ConfigError(f"Invalid {name}: expected float, got {raw_value!r}") from exc
 
 
-def load_config(require_withings: bool = False) -> Config:
+def load_config(require_withings: bool = False, require_hevy: bool = False) -> Config:
     pguser = _read_env("PGUSER")
     pgpassword = _read_env("PGPASSWORD")
     withings_client_id = _read_env("WITHINGS_CLIENT_ID")
     withings_client_secret = _read_env("WITHINGS_CLIENT_SECRET")
+    hevy_api_key = _read_env("HEVY_API_KEY")
 
     missing: list[str] = []
     if pguser is None:
@@ -67,6 +69,8 @@ def load_config(require_withings: bool = False) -> Config:
             missing.append("WITHINGS_CLIENT_ID")
         if withings_client_secret is None:
             missing.append("WITHINGS_CLIENT_SECRET")
+    if require_hevy and hevy_api_key is None:
+        missing.append("HEVY_API_KEY")
 
     if missing:
         raise ConfigError(
@@ -97,4 +101,5 @@ def load_config(require_withings: bool = False) -> Config:
         garmin_seed_path=garmin_seed_path,
         tz_local=tz_local,
         garmin_pacing_min=garmin_pacing_min,
+        hevy_api_key=hevy_api_key,
     )

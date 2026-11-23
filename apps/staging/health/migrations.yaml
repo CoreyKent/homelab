@@ -862,3 +862,134 @@ data:
     END $$;
 
     COMMIT;
+  0009_hevy.sql: |
+    -- 0009: Hevy strength log (23/11/2026). One row per workout, exercise and set, mirrored from the Hevy
+    -- public API by the `hevy` collector, which re-reads every workout each run (a full, authoritative
+    -- snapshot), so edits and deletions made in the app reach these tables.
+    --
+    -- Times arrive from Hevy in UTC; local_date is the workout's start in Australia/Sydney, set by the
+    -- collector (as garmin.activity's is). A set at weight_kg 0 means bodyweight: Hevy stores 0 for
+    -- bodyweight work on a weighted template. No RPE has been logged so far.
+    -- Schema only: no values here (the repo is public). Idempotent: safe to re-run.
+
+    BEGIN;
+
+    CREATE SCHEMA IF NOT EXISTS hevy;
+
+    CREATE TABLE IF NOT EXISTS hevy.workout (
+      workout_id  text        PRIMARY KEY,
+      title       text        NOT NULL,
+      routine_id  text,
+      description text,
+      start_ts    timestamptz NOT NULL,
+      end_ts      timestamptz,
+      local_date  date        NOT NULL,                -- collector-computed (Australia/Sydney)
+      updated_at  timestamptz NOT NULL,                -- Hevy's own edit time
+      created_at  timestamptz,
+      raw         jsonb       NOT NULL,
+      fetched_at  timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS hevy.exercise (
+      workout_id           text NOT NULL REFERENCES hevy.workout (workout_id) ON DELETE CASCADE,
+      exercise_idx         integer NOT NULL CHECK (exercise_idx >= 0),
+      exercise_template_id text NOT NULL,
+      title                text NOT NULL,
+      notes                text,
+      superset_id          integer,
+      PRIMARY KEY (workout_id, exercise_idx)
+    );
+
+    CREATE TABLE IF NOT EXISTS hevy.set (
+      workout_id    text    NOT NULL,
+      exercise_idx  integer NOT NULL,
+      set_idx       integer NOT NULL CHECK (set_idx >= 0),
+      set_type      text    NOT NULL,                  -- normal | warmup | dropset | failure
+      weight_kg     numeric CHECK (weight_kg >= 0 AND weight_kg < 1000),
+      reps          integer CHECK (reps >= 0),
+      distance_m    numeric CHECK (distance_m >= 0),
+      duration_s    integer CHECK (duration_s >= 0),
+      rpe           numeric CHECK (rpe BETWEEN 1 AND 10),
+      custom_metric numeric,
+      PRIMARY KEY (workout_id, exercise_idx, set_idx),
+      FOREIGN KEY (workout_id, exercise_idx) REFERENCES hevy.exercise (workout_id, exercise_idx) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS hevy.exercise_template (
+      template_id             text PRIMARY KEY,
+      title                   text NOT NULL,
+      type                    text,                    -- weight_reps | reps_only | duration | ... (NULL: fetch failed)
+      primary_muscle_group    text,
+      secondary_muscle_groups text[],
+      equipment               text,
+      is_custom               boolean,
+      fetch_ok                boolean NOT NULL,        -- false: Hevy returned 404; title copied from the exercise row
+      raw                     jsonb,
+      fetched_at              timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS workout_local_date_idx ON hevy.workout (local_date);
+    CREATE INDEX IF NOT EXISTS workout_updated_at_idx ON hevy.workout (updated_at);
+    CREATE INDEX IF NOT EXISTS exercise_template_id_idx ON hevy.exercise (exercise_template_id);
+
+    -- One row per set with its day, workout and template. is_working excludes warm-ups only.
+    CREATE OR REPLACE VIEW hevy.set_v AS
+    SELECT w.local_date, w.start_ts, w.workout_id, w.title AS workout_title,
+           e.exercise_idx, e.exercise_template_id AS template_id, e.title AS exercise_title,
+           t.type AS template_type, t.primary_muscle_group,
+           s.set_idx, s.set_type, s.weight_kg, s.reps, s.duration_s, s.distance_m, s.rpe,
+           (s.set_type <> 'warmup') AS is_working
+    FROM hevy.set s
+    JOIN hevy.exercise e USING (workout_id, exercise_idx)
+    JOIN hevy.workout w USING (workout_id)
+    LEFT JOIN hevy.exercise_template t ON t.template_id = e.exercise_template_id;
+
+    GRANT USAGE ON SCHEMA hevy TO qs_writer, qs_reader;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA hevy TO qs_writer;
+    GRANT SELECT ON ALL TABLES IN SCHEMA hevy TO qs_reader;   -- tables and the view; Carter reads via qs_reader
+    ALTER DEFAULT PRIVILEGES IN SCHEMA hevy GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO qs_writer;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA hevy GRANT SELECT ON TABLES TO qs_reader;
+    -- The writer must not be able to change the view the reader trusts.
+    REVOKE INSERT, UPDATE, DELETE ON hevy.set_v FROM qs_writer;
+
+    -- ── assertions ─────────────────────────────────────────────────────────────────────────────────
+    DO $$
+    BEGIN
+      IF NOT has_table_privilege('qs_reader', 'hevy.set_v', 'SELECT') THEN RAISE EXCEPTION '0009: reader cannot read set_v'; END IF;
+      IF has_table_privilege('qs_reader', 'hevy.workout', 'INSERT') THEN RAISE EXCEPTION '0009: reader can write'; END IF;
+      IF NOT has_table_privilege('qs_writer', 'hevy.set', 'DELETE') THEN RAISE EXCEPTION '0009: writer cannot delete sets'; END IF;
+      -- Index names must not collide with a relation (IF NOT EXISTS would skip them silently).
+      IF (SELECT count(*) FROM pg_indexes WHERE schemaname = 'hevy'
+          AND indexname IN ('workout_local_date_idx', 'workout_updated_at_idx', 'exercise_template_id_idx')) <> 3 THEN
+        RAISE EXCEPTION '0009: an index is missing';
+      END IF;
+      PERFORM count(*) FROM hevy.set_v;
+    END $$;
+
+    -- Negative controls (subtransactions, nothing persists): a deleted workout takes its sets with it,
+    -- and an impossible weight is refused.
+    DO $$
+    BEGIN
+      BEGIN
+        INSERT INTO hevy.workout (workout_id, title, start_ts, local_date, updated_at, raw)
+          VALUES ('zz_0009', 'x', now(), current_date, now(), '{}');
+        INSERT INTO hevy.exercise (workout_id, exercise_idx, exercise_template_id, title) VALUES ('zz_0009', 0, 'zz', 'x');
+        INSERT INTO hevy.set (workout_id, exercise_idx, set_idx, set_type, weight_kg, reps) VALUES ('zz_0009', 0, 0, 'normal', 20, 5);
+        DELETE FROM hevy.workout WHERE workout_id = 'zz_0009';
+        IF EXISTS (SELECT 1 FROM hevy.set WHERE workout_id = 'zz_0009') THEN RAISE EXCEPTION '0009 control: sets survived their workout'; END IF;
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'zz_0009_rollback';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'zz_0009_rollback' THEN RAISE; END IF;
+      END;
+      BEGIN
+        INSERT INTO hevy.workout (workout_id, title, start_ts, local_date, updated_at, raw)
+          VALUES ('zz_0009b', 'x', now(), current_date, now(), '{}');
+        INSERT INTO hevy.exercise (workout_id, exercise_idx, exercise_template_id, title) VALUES ('zz_0009b', 0, 'zz', 'x');
+        INSERT INTO hevy.set (workout_id, exercise_idx, set_idx, set_type, weight_kg) VALUES ('zz_0009b', 0, 0, 'normal', 1500);
+        RAISE EXCEPTION '0009 control: a 1500 kg set was accepted';
+      EXCEPTION WHEN check_violation THEN NULL;
+      END;
+      IF EXISTS (SELECT 1 FROM hevy.workout WHERE workout_id LIKE 'zz_0009%') THEN RAISE EXCEPTION '0009: control rows leaked'; END IF;
+    END $$;
+
+    COMMIT;

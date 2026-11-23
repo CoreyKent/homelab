@@ -1,0 +1,124 @@
+# Hevy strength log -> hevy.* (23/11/2026, `20261123-hevy-collector`). Every run re-reads every workout
+# (a full snapshot), so edits and deletions made in the app are mirrored; stale rows are deleted only behind
+# three guards (all pages fetched, count matches Hevy's, at most max(3, 10%) removed).
+#
+# Hevy's personal API key can also WRITE to the account, and there is no read-only personal key. The code is
+# GET-only, so the pod is the boundary: its own ServiceAccount with no token, non-root, read-only root
+# filesystem, no capabilities, and egress limited by hevy-collector-egress (DNS, health-pg, HTTPS outside the
+# LAN). Residual risk, accepted for v1: a key copied out of the Secret works from anywhere. v2 is a Hevy OAuth
+# app with the read-only `read-workout` scope.
+# Only this CronJob runs 0.1.3; Garmin and Withings stay on 0.1.2 (their code is unchanged).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hevy-collector
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hevy-collector
+spec:
+  # Every 30 minutes, offset from Garmin (:00/:30) and Withings (:15).
+  schedule: "10,40 * * * *"
+  suspend: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: hevy-collector
+        spec:
+          restartPolicy: Never
+          serviceAccountName: hevy-collector
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: collector
+              image: 192.168.50.81:30500/health-collector:0.1.3@sha256:17919ef5ce275a28258e27304589c63644b05f0d1fa83d41fb346bae1e14d4e7
+              args: ["hevy"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              env:
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-writer
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: pg-qs-writer
+                      key: password
+                - name: HEVY_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: hevy-api
+                      key: HEVY_API_KEY
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              # PGHOST/PGPORT/PGDATABASE/TZ_LOCAL are omitted: the collector defaults match this cluster.
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 16Mi
+---
+# Egress for the Hevy pod only (no other pod in the namespace is selected, so nothing else changes).
+# A core NetworkPolicy cannot name a host, so Hevy is "HTTPS anywhere outside private ranges": the LAN, the
+# tailnet (100.64.0.0/10) and the cluster's pod and service ranges are all excluded. No ingress is allowed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hevy-collector-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: hevy-collector
+  policyTypes: ["Ingress", "Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: health-pg
+              cnpg.io/instanceRole: primary
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"]
+      ports:
+        - { protocol: TCP, port: 443 }

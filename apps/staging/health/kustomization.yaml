@@ -9,6 +9,7 @@ resources:
   - pg-carter.secret.yaml
   - pg-qs-goals.secret.yaml
   - withings-app.secret.yaml
+  - hevy-api.secret.yaml
   # Garmin tokenstore seed — sealed from Corey MFA bootstrap 23/07/2026; DB becomes authoritative after first run.
   - garmin-tokenstore.secret.yaml
   - cluster.yaml
@@ -21,12 +22,14 @@ resources:
   - migrate-job-0006.yaml
   - migrate-job-0007.yaml
   - migrate-job-0008.yaml
+  - migrate-job-0009.yaml
   - backup-pvc.yaml
   - pg-tailnet-service.yaml
   - pgdump-cronjob.yaml
   - goals-deadman-cronjob.yaml
   - garmin-cronjob.yaml
   - withings-cronjob.yaml
+  - hevy-cronjob.yaml
   # Grafana admin secret — sealed by the orchestrator; referenced here, never authored by the builder.
   - grafana-admin.secret.yaml
   - grafana-pvc.yaml
