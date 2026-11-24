@@ -49,7 +49,7 @@
         "uid": "health-pg"
       },
       "gridPos": {
-        "h": 9,
+        "h": 11,
         "w": 24,
         "x": 0,
         "y": 0
@@ -262,7 +262,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -630,7 +630,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -976,7 +976,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 21
       },
       "fieldConfig": {
         "defaults": {
@@ -1344,7 +1344,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 21
       },
       "fieldConfig": {
         "defaults": {
@@ -1712,7 +1712,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 29
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -2091,7 +2091,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 29
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -2448,7 +2448,7 @@
         "h": 9,
         "w": 8,
         "x": 0,
-        "y": 39
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -2821,7 +2821,7 @@
         "h": 9,
         "w": 8,
         "x": 8,
-        "y": 39
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -3194,7 +3194,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 39
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -3567,7 +3567,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 48
+        "y": 50
       },
       "description": "From ops.goal_health_v — the same view the in-cluster dead-man (CronJob goals-deadman → Gatus health-goals-fresh) checks.",
       "fieldConfig": {
@@ -3643,10 +3643,10 @@
         "uid": "health-pg"
       },
       "gridPos": {
-        "h": 5,
+        "h": 11,
         "w": 16,
         "x": 8,
-        "y": 48
+        "y": 50
       },
       "description": "Days since each source's ingestion watermark (not since the last session) and the last qualifying reading or session.",
       "fieldConfig": {
